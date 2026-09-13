@@ -1,0 +1,20 @@
+{
+  "cmake.sourceDirectory": "${workspaceFolder}",
+  "cmake.buildDirectory": "${workspaceFolder}/build",
+  "cmake.generator": "Ninja",
+  "cmake.cmakePath": "D:/cmake/bin/cmake.exe",
+  "cmake.configureArgs": ["-DCMAKE_BUILD_TYPE=Debug"],
+  "cmake.buildArgs": [],
+  "C_Cpp.default.compilerPath": "D:/mingw64/mingw64/bin/g++.exe",
+  "C_Cpp.default.cppStandard": "c++17",
+  "C_Cpp.default.cStandard": "c11",
+  "C_Cpp.default.intelliSenseMode": "windows-gcc-x64",
+  "editor.formatOnSave": true,
+  "files.associations": {
+    "*.tpp": "cpp"
+  },
+  "search.exclude": {
+    "build": true,
+    "third_party": true
+  }
+}

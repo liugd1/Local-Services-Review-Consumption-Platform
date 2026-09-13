@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>巷味 · 本地生活志</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏮</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=Noto+Serif+SC:wght@600;900&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+<link href="/css/style.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
+</head>
+<body>
+
+<!-- 顶部导航 -->
+<header class="topbar" id="topbar">
+  <div class="container-xl d-flex align-items-center gap-3">
+    <a class="brand d-flex align-items-center gap-2 me-lg-3" href="#/" data-nav="/">
+      <span class="brand-mark">巷</span>
+      <span class="brand-text">味<span class="brand-sub">· 本地生活志</span></span>
+    </a>
+    <form class="searchbox flex-grow-1 mx-1" id="searchForm" autocomplete="off">
+      <i class="bi bi-search"></i>
+      <input id="searchInput" type="text" placeholder="搜一搜：火锅 / 桌游 / 美发…" aria-label="搜索">
+    </form>
+    <nav class="nav-links d-none d-lg-flex" id="topNav"></nav>
+    <div class="auth-box" id="authBox"></div>
+  </div>
+</header>
+
+<!-- 视图容器 -->
+<main id="app" class="page"></main>
+
+<footer class="site-footer">
+  <div class="container-xl d-flex flex-wrap justify-content-between gap-2">
+    <div><span class="brand-mark sm">巷</span> 巷味 · 本地生活志 —— 发现你身边的好店</div>
+    <div class="text-muted small">本地生活商户评价与消费服务平台 · C++ 后端演示</div>
+  </div>
+</footer>
+
+<!-- 登录 / 注册 -->
+<div class="modal fade" id="authModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content auth-card">
+      <button type="button" class="btn-close auth-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+      <div class="auth-tabs" id="authTabs">
+        <button class="auth-tab active" data-tab="login" type="button">登录</button>
+        <button class="auth-tab" data-tab="register" type="button">注册</button>
+      </div>
+      <!-- 登录 -->
+      <form id="loginForm" class="auth-form show">
+        <h3 class="auth-title">欢迎回来</h3>
+        <p class="auth-desc">继续发现这座城里的好去处</p>
+        <div class="mb-3">
+          <label class="form-label">用户名</label>
+          <input class="form-control form-control-lg" name="username" placeholder="输入用户名" required>
+        </div>
+        <div class="mb-4">
+          <label class="form-label">密码</label>
+          <input class="form-control form-control-lg" type="password" name="password" placeholder="••••••••" required>
+        </div>
+        <button class="btn btn-main btn-lg w-100" type="submit">登 录</button>
+        <p class="auth-hint mt-3">演示账号：admin / admin123（管理员）</p>
+      </form>
+      <!-- 注册 -->
+      <form id="registerForm" class="auth-form">
+        <h3 class="auth-title">创建账号</h3>
+        <p class="auth-desc">成为巷味社区的一员</p>
+        <div class="mb-3">
+          <label class="form-label">用户名 <small>（3-32 位字母数字）</small></label>
+          <input class="form-control form-control-lg" name="username" placeholder="如 xiaofan" required>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">昵称</label>
+          <input class="form-control form-control-lg" name="nickname" placeholder="大家怎么称呼你">
+        </div>
+        <div class="mb-4">
+          <label class="form-label">密码 <small>（至少 6 位）</small></label>
+          <input class="form-control form-control-lg" type="password" name="password" placeholder="••••••••" required>
+        </div>
+        <button class="btn btn-main btn-lg w-100" type="submit">注 册</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- 提示 -->
+<div class="toast-container position-fixed top-0 end-0 p-3" id="toastBox"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="/js/common.js?v=9"></script>
+<script src="/js/home.js?v=9"></script>
+<script src="/js/talk.js?v=9"></script>
+<script src="/js/user.js?v=9"></script>
+<script src="/js/shop.js?v=9"></script>
+<script src="/js/admin.js?v=9"></script>
+<script src="/js/app.js?v=9"></script>
+</body>
+</html>

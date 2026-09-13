@@ -1,0 +1,19 @@
+{
+  "configurations": [
+    {
+      "name": "MinGW64",
+      "includePath": [
+        "${workspaceFolder}/src/**",
+        "${workspaceFolder}/third_party/httplib",
+        "${workspaceFolder}/third_party/json",
+        "${workspaceFolder}/third_party/picosha2",
+        "${workspaceFolder}/third_party/sqlite3"
+      ],
+      "compilerPath": "D:/mingw64/mingw64/bin/g++.exe",
+      "cStandard": "c11",
+      "cppStandard": "c++17",
+      "intelliSenseMode": "windows-gcc-x64"
+    }
+  ],
+  "version": 4
+}

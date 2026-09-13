@@ -1,0 +1,67 @@
+# ---------------- 构建产物 ----------------
+build/
+cmake-build-*/
+out/
+*.o
+*.obj
+*.exe
+*.a
+*.lib
+*.pdb
+*.ilk
+*.idb
+*.dll
+*.so
+
+# ---------------- CMake / 编辑器 ----------------
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+.vs/
+.vscode/*.log
+*.user
+*.code-workspace
+.idea/
+*.swp
+*~
+
+# ---------------- 运行期产物 ----------------
+# SQLite 单文件数据库（首次启动自动建表，无需提交）
+*.db
+*.db-journal
+*.db-wal
+*.sqlite
+*.sqlite3
+data/
+logs/
+*.log
+
+# 用户上传的图片（仅保留目录占位文件）
+public/uploads/*
+!public/uploads/.gitkeep
+
+# ---------------- 测试 / 工具缓存 ----------------
+.playwright-cli/
+node_modules/
+package-lock.json
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# ---------------- 临时文件 / 敏感信息 ----------------
+# 本地抓包、临时输出、环境变量等一律不入库
+*.tmp
+*.bak
+*.orig
+*.local
+.env
+.env.*
+!.env.example
+
+# ---------------- 系统 ----------------
+.DS_Store
+Thumbs.db
+desktop.ini
+
