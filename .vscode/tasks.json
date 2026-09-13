@@ -4,7 +4,7 @@
     {
       "type": "cppbuild",
       "label": "build",
-      "command": "D:/cmake/bin/cmake.exe",
+      "command": "cmake",
       "args": [
         "--build",
         "${workspaceFolder}/build"

@@ -3,7 +3,7 @@
 > **C++17 RESTful 后端 + 原生单页前端** 的本地生活服务（餐饮 / 休闲娱乐 / 美容美发 / 运动健身 / 摄影 / 桌游 / KTV）评价与消费平台，
 > 面向 **普通消费者 · 商户经营者 · 平台管理员** 三类角色。
 >
-> 配套文档：`plan.md`（开发计划 v1.3）｜ 更新日期：2026-09-08
+> 更新日期：2026-09-08
 
 ---
 
@@ -150,11 +150,12 @@ build/locallife.exe          # Windows
 | 掌柜工作台（概览 / 服务） | `#/shop?tab=…` | `docs/screens/5_shop.png`、`8_shop_services.png` |
 | 平台管理台 | `#/admin?tab=…` | `docs/screens/4_admin.png` |
 | 评论权限与删除治理 | 评论区操作组 | `14_admin_delete_comment.png`、`15_comment_permissions.png` |
-| **领券中心 + 套餐购买** | `#/m/{id}` | `docs/screens/e2e678/1_merchant_coupon_band.png` |
-| **我的卡券 / 我的套餐订单** | `#/me?tab=coupons|orders` | `e2e678/2_me_coupons.png`、`e2e678/3_me_orders.png` |
-| **优惠活动管理 + 核销** | `#/shop?tab=coupons` | `docs/screens/e2e678/4_shop_coupons.png` |
-| **经营统计（商户）** | `#/shop?tab=stats` | `docs/screens/e2e678/5_shop_stats.png` |
-| **数据看板（平台）** | `#/admin?tab=stats` | `docs/screens/e2e678/6_admin_stats.png` |
+| 任意层评论回复 | 评价卡点「评论 N」展开评论楼 | `12_nested_reply.png`、`13_reply_B_in_ui.png` |
+| **领券中心 + 套餐购买** | `#/m/{id}` | `docs/screens/modules678/1_merchant_coupon_band.png` |
+| **我的卡券 / 我的套餐订单** | `#/me?tab=coupons|orders` | `modules678/2_me_coupons.png`、`modules678/3_me_orders.png` |
+| **优惠活动管理 + 核销** | `#/shop?tab=coupons` | `docs/screens/modules678/4_shop_coupons.png` |
+| **经营统计（商户）** | `#/shop?tab=stats` | `docs/screens/modules678/5_shop_stats.png` |
+| **数据看板（平台）** | `#/admin?tab=stats` | `docs/screens/modules678/6_admin_stats.png` |
 
 ---
 
@@ -168,7 +169,7 @@ build/locallife.exe          # Windows
 | 并发 | 单连接 + FULLMUTEX + 互斥锁；写操作 `BEGIN IMMEDIATE`；领取等场景用原子 UPDATE 防超发 |
 | 前端 | 原生 HTML / CSS / JS（无框架）SPA + hash 路由；Bootstrap 5.3 + Bootstrap Icons（CDN）；ECharts 5.5 |
 | 构建 | CMake / Ninja / MinGW GCC（Windows）或 Make/Ninja（*nix） |
-| 测试 | curl 接口回归脚本 + Playwright（headless Chromium）端到端页面验证（见 `docs/tests/`） |
+| 测试 | curl 接口回归 + Playwright（headless Chromium）端到端页面验证与截图 |
 
 
 ---
@@ -198,10 +199,8 @@ Local-Services-Review-Consumption-Platform/
 │   ├── js/                         common / home / talk / user / shop / admin / app
 │   └── uploads/                    用户上传图片（运行期生成，不入库）
 ├── third_party/                    随仓依赖：httplib / json / picosha2 / sqlite3
-├── docs/screens/                   页面截图（含 e2e678/ 新模块验证图）
-├── docs/tests/                     Playwright 端到端脚本（e2e678.mjs、e2e678_buy.mjs）
-├── plan.md                         开发计划与验证记录
-└── README.md                       本文档
+├── docs/screens/                   页面截图（含 modules678/ 新模块验证图）
+└── README.md / LICENSE             项目说明与开源协议
 ```
 
 ---
@@ -306,11 +305,11 @@ Local-Services-Review-Consumption-Platform/
 模块 6-8 覆盖：发券→发布→公开列表→领取发码→重复领取 409→核销 200→二次核销 409，
 购买→核销（消费流水联动）→重复核销 409→已用退款 409→未用退款 200，商户与平台统计接口均 200。
 
-**端到端页面验证（Playwright headless Chromium，`docs/tests/`）**：
+**端到端页面验证（Playwright headless Chromium）**：
 
 - 六个新页面渲染正常且 **控制台 0 错误**；
 - 页面内完成「领券 → 详情购买套餐 → 我的订单出现待使用 → 点击核销 → 状态变为已使用」完整闭环；
-- 截图见 `docs/screens/e2e678/`。
+- 截图见 `docs/screens/modules678/`。
 
 **已知边界**
 
