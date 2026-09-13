@@ -331,7 +331,7 @@ Local-Services-Review-Consumption-Platform/
 
 ## 12. 许可证
 
-本项目为毕业设计作品，采用 **MIT License** 发布，可自由学习与参考；使用到的第三方库
+本项目为个人学习作品，采用 **MIT License** 发布，可自由学习与参考；使用到的第三方库
 （cpp-httplib、nlohmann/json、SQLite3、PicoSHA2、Bootstrap、ECharts）遵循其各自开源协议。
 
 ---
