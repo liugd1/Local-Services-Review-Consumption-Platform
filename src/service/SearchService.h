@@ -18,4 +18,8 @@ public:
     static nlohmann::json hotRank();
     static nlohmann::json newRank();
     static nlohmann::json categoryRank(long long categoryId);
+
+    // 门店详情（消费者选购入口）：门店信息 + 本店在售服务/套餐/活动 + 门店口碑汇总
+    static nlohmann::json storeDetail(long long storeId, long long viewerId,
+                                      const std::string& viewerRole);
 };

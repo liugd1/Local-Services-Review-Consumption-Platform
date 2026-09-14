@@ -9,7 +9,7 @@ LL.views.me = async function (el, tab) {
     ["consumption", "bi-receipt", "消费记录"],
     ["reviews", "bi-chat-square-quote", "我的评价"],
     ["coupons", "bi-ticket-perforated", "我的卡券"],
-    ["orders", "bi-bag-check", "套餐订单"]
+    ["orders", "bi-bag-check", "我的订单"]
   ];
   const activeTab = tabs.some(t => t[0] === tab) ? tab : "overview";
   const links = tabs.map(t =>
@@ -236,16 +236,27 @@ async function renderMyOrders(main) {
     body.innerHTML = "加载中…";
     try {
       const d = await LL.api("GET", "/api/my/orders?page=1&size=50");
-      if (!d.total) { body.innerHTML = emptyBox("还没有购买过套餐"); return; }
-      body.innerHTML = '<table class="table"><thead><tr><th>订单号</th><th>套餐</th><th>商户</th><th>金额</th><th>下单时间</th><th>状态</th><th style="width:190px">操作</th></tr></thead><tbody>' +
+      if (!d.total) { body.innerHTML = emptyBox("还没有订单，去门店选购服务或套餐吧"); return; }
+      body.innerHTML = '<table class="table"><thead><tr><th>订单号</th><th>项目</th><th>门店</th><th>金额</th><th>下单时间</th><th>状态</th><th style="width:190px">操作</th></tr></thead><tbody>' +
         d.list.map(o => {
           const acts = o.status === "purchased"
             ? '<button class="btn btn-main btn-sm" data-use="' + o.id + '">去使用</button> ' +
               '<button class="btn btn-ghost btn-sm" data-ref="' + o.id + '">退款</button>'
             : '<span class="text-muted small">—</span>';
-          return '<tr><td class="text-muted small">' + LL.esc(o.order_no) + '</td><td><b>' + LL.esc(o.package_name) + '</b></td><td>' + LL.esc(o.merchant_name) +
-            '</td><td class="price-min">' + LL.money(o.amount) + '</td><td class="text-muted" style="font-size:12px">' + LL.esc(String(o.created_at || "").slice(0, 16)) +
-            '</td><td><span class="badge-soft badge-' + LL.statusClass(o.status).replace("badge-", "") + '">' + LL.statusZh(o.status) + "</span></td><td>" + acts + "</td></tr>";
+          const typeTag = o.item_type === "service"
+            ? '<span class="badge-soft badge-pending">服务</span>'
+            : '<span class="badge-soft badge-approved">套餐</span>';
+          const sub = o.item_type === "package"
+            ? (o.package_content || "") + (o.package_valid_days ? " · 有效期 " + o.package_valid_days + " 天" : "")
+            : (o.service_applicable_time || "");
+          return '<tr><td class="text-muted small">' + LL.esc(o.order_no) + "</td>" +
+            "<td>" + typeTag + ' <b>' + LL.esc(o.item_name || "—") + "</b>" +
+            (sub ? '<div class="text-muted" style="font-size:11.5px">' + LL.esc(sub) + "</div>" : "") + "</td>" +
+            "<td>" + LL.esc(o.store_name || "—") + (o.store_area ? '<div class="text-muted" style="font-size:11.5px">' + LL.esc(o.store_area) + "</div>" : "") + "</td>" +
+            '<td class="price-min">' + LL.money(o.amount) + "</td>" +
+            '<td class="text-muted" style="font-size:12px">' + LL.esc(String(o.created_at || "").slice(0, 16)) + "</td>" +
+            '<td><span class="badge-soft badge-' + LL.statusClass(o.status).replace("badge-", "") + '">' + LL.statusZh(o.status) + "</span></td>" +
+            "<td>" + acts + "</td></tr>";
         }).join("") + "</tbody></table>";
       body.querySelectorAll("[data-use]").forEach(b => b.addEventListener("click", async () => {
         if (!confirm("确认到店核销该套餐？将自动记录一条消费。")) return;

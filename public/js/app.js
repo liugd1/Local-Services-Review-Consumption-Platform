@@ -26,6 +26,8 @@
         });
       } else if (/^m\/\d+$/.test(path)) {
         await LL.views.merchant(app, path.split("/")[1]);
+      } else if (/^s\/\d+$/.test(path)) {
+        await LL.views.store(app, path.split("/")[1]);   // 门店选购页（下单主体＝门店）
       } else if (/^talk\/(merchant|store|service|package)\/\d+$/.test(path)) {
         const ps = path.split("/");
         await LL.views.talk(app, [ps[1], ps[2]]);

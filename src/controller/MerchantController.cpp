@@ -39,6 +39,39 @@ void MerchantController::registerRoutes(httplib::Server& svr) {
     });
 
     // ---- 门店 ----
+    // 门店经营项目：全部服务/套餐/活动 + 本店上架状态（由门店决定是否运营）
+    svr.Get(R"(/api/merchant/stores/(\d+)/offerings)",
+            [](const httplib::Request& req, httplib::Response& res) {
+                guard([&] {
+                    auto ctx = api::authenticate(req);
+                    if (!requireRole(ctx, "merchant", res)) return;
+                    sendOk(res, MerchantService::storeOfferings(
+                                    ctx->userId, std::stoll(req.matches[1].str())));
+                }, res);
+            });
+    // 单项上/下架 {item_type: service|package|coupon, item_id, status: on|off}
+    svr.Put(R"(/api/merchant/stores/(\d+)/offerings)",
+            [](const httplib::Request& req, httplib::Response& res) {
+                guard([&] {
+                    auto ctx = api::authenticate(req);
+                    if (!requireRole(ctx, "merchant", res)) return;
+                    MerchantService::setStoreOffering(ctx->userId, std::stoll(req.matches[1].str()),
+                                                      parseBody(req));
+                    sendOk(res);
+                }, res);
+            });
+    // 批量上/下架 {item_type, status}
+    svr.Put(R"(/api/merchant/stores/(\d+)/offerings/bulk)",
+            [](const httplib::Request& req, httplib::Response& res) {
+                guard([&] {
+                    auto ctx = api::authenticate(req);
+                    if (!requireRole(ctx, "merchant", res)) return;
+                    MerchantService::bulkStoreOffering(ctx->userId, std::stoll(req.matches[1].str()),
+                                                       parseBody(req));
+                    sendOk(res);
+                }, res);
+            });
+
     svr.Get("/api/merchant/stores", [](const httplib::Request& req, httplib::Response& res) {
         guard([&] {
             auto ctx = api::authenticate(req);

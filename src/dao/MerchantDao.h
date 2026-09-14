@@ -42,4 +42,26 @@ long long addPackage(long long merchantId, const nlohmann::json& p);
 void updatePackage(long long id, const nlohmann::json& p);
 bool updatePackageStatus(long long id, const std::string& status);
 
+// ---- 门店经营项目上架关系（itemKind: service / package / coupon）----
+// 门店维度：列出该商户全部项目 + 本门店上架状态（未建关系视为未上架）
+nlohmann::json storeOfferings(long long storeId, long long merchantId);
+// 上/下架单个项目
+bool setStoreOffering(long long storeId, const std::string& itemKind, long long itemId,
+                      const std::string& status);
+// 批量上/下架某类项目（该商户全部）
+void bulkStoreOffering(long long storeId, long long merchantId, const std::string& itemKind,
+                       const std::string& status);
+// 门店在售数量 { services, packages, coupons }
+nlohmann::json storeOnSaleCounts(long long storeId);
+// 新增项目后：为该商户所有门店默认上架
+void fanoutItemToStores(long long merchantId, const std::string& itemKind, long long itemId);
+// 新增门店后：把该商户现有项目默认上架到新门店
+void fanoutStoreItems(long long merchantId, long long storeId);
+// 门店级可见列表（消费者端，仅 status='on' 且项目本身 on/上架）
+nlohmann::json listStoreServices(long long storeId);
+nlohmann::json listStorePackages(long long storeId);
+nlohmann::json listStoreCoupons(long long storeId);
+// 判断某项目在某门店是否在售
+bool isOnSaleAtStore(long long storeId, const std::string& itemKind, long long itemId);
+
 }  // namespace MerchantDao

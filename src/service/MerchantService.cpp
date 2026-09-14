@@ -1,5 +1,6 @@
 #include "service/MerchantService.h"
 
+#include "dao/CouponDao.h"
 #include "dao/MerchantDao.h"
 #include "dao/UserDao.h"
 #include "model/Models.h"
@@ -188,6 +189,70 @@ void MerchantService::deleteStore(long long userId, long long storeId) {
     requireApproved(m);
     assertStoreOwned(merchantIdOf(m), storeId);
     MerchantDao::removeStore(storeId);
+}
+
+// ---------------- 门店经营项目上架（店铺定义项目，门店决定是否运营）----------------
+namespace {
+
+// 校验项目归属（service / package / coupon 必须属于当前商户）
+void assertItemOwned(long long merchantId, const std::string& kind, long long itemId) {
+    if (kind == "service") {
+        assertServiceOwned(merchantId, itemId);
+    } else if (kind == "package") {
+        assertPackageOwned(merchantId, itemId);
+    } else if (kind == "coupon") {
+        auto c = CouponDao::byId(itemId);
+        if (c.is_null() || c.value("merchant_id", 0LL) != merchantId)
+            throw BizError(resp::NOT_FOUND, "优惠活动不存在或不属于当前商户");
+    } else {
+        throw BizError(resp::PARAM_ERROR, "item_type 仅支持 service / package / coupon");
+    }
+}
+
+void assertOfferingStatus(const std::string& status) {
+    if (status != "on" && status != "off")
+        throw BizError(resp::PARAM_ERROR, "上架状态仅支持 on（上架）/ off（下架）");
+}
+
+}  // namespace
+
+nlohmann::json MerchantService::storeOfferings(long long userId, long long storeId) {
+    auto m = myMerchantOrThrow(userId);
+    auto mid = merchantIdOf(m);
+    assertStoreOwned(mid, storeId);
+    auto data = MerchantDao::storeOfferings(storeId, mid);
+    data["counts"] = MerchantDao::storeOnSaleCounts(storeId);
+    data["store"] = MerchantDao::storeById(storeId);
+    return data;
+}
+
+void MerchantService::setStoreOffering(long long userId, long long storeId,
+                                       const nlohmann::json& body) {
+    auto m = myMerchantOrThrow(userId);
+    requireApproved(m);
+    auto mid = merchantIdOf(m);
+    assertStoreOwned(mid, storeId);
+    std::string kind = jsonStr(body, "item_type");
+    long long itemId = jsonInt(body, "item_id");
+    std::string status = jsonStr(body, "status", "on");
+    assertItemOwned(mid, kind, itemId);
+    assertOfferingStatus(status);
+    if (!MerchantDao::setStoreOffering(storeId, kind, itemId, status))
+        throw BizError(resp::SERVER_ERROR, "设置门店上架状态失败");
+}
+
+void MerchantService::bulkStoreOffering(long long userId, long long storeId,
+                                        const nlohmann::json& body) {
+    auto m = myMerchantOrThrow(userId);
+    requireApproved(m);
+    auto mid = merchantIdOf(m);
+    assertStoreOwned(mid, storeId);
+    std::string kind = jsonStr(body, "item_type");
+    std::string status = jsonStr(body, "status", "on");
+    if (kind != "service" && kind != "package" && kind != "coupon")
+        throw BizError(resp::PARAM_ERROR, "item_type 仅支持 service / package / coupon");
+    assertOfferingStatus(status);
+    MerchantDao::bulkStoreOffering(storeId, mid, kind, status);
 }
 
 // ---------------- 服务项目 ----------------

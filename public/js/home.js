@@ -251,28 +251,64 @@ LL.views.merchant = async function (el, id) {
         <div class="info-cell"><b>入驻时间</b><span>${LL.esc(String(m.created_at || "").slice(0, 10))}</span></div>
       </div></div>`;
 
+  const canBuy = !!(user && user.role === "consumer" && !isOwner);
   const svcs = m.services || [];
+  const svcStores = m.service_stores || {};
+  const firstStoreOf = (map, id) => {
+    const arr = map[String(id)] || [];
+    return arr.length ? arr[0] : 0;
+  };
   const svcHtml = svcs.length
     ? '<div class="panel" style="margin-top:1.1rem"><h5><i class="bi bi-list-check"></i> 招牌服务</h5>' +
-      svcs.map(s => '<div class="good-row"><div class="good-name"><b>' + LL.esc(s.name) + "</b><small>" +
-        LL.esc(s.applicable_time || "适用时段不限") + (s.store_name ? " · " + LL.esc(s.store_name) : "") +
-        (Number(s.stock) >= 0 ? " · 余量 " + s.stock : "") + "</small></div>" +
-        '<span class="good-price">' + LL.money(s.price) + '</span>' +
-        '<a class="btn btn-ghost btn-sm ms-2" href="#/talk/service/' + s.id + '">口碑评价 ›</a></div>').join("") + "</div>"
+      svcs.map(s => {
+        const sid = firstStoreOf(svcStores, s.id);
+        return '<div class="good-row"><div class="good-name"><b>' + LL.esc(s.name) + "</b><small>" +
+          LL.esc(s.applicable_time || "适用时段不限") +
+          (Number(s.stock) >= 0 ? " · 余量 " + s.stock : "") + "</small></div>" +
+          '<span class="good-price">' + LL.money(s.price) + '</span>' +
+          '<a class="btn btn-ghost btn-sm ms-2" href="#/talk/service/' + s.id + '">口碑评价 ›</a>' +
+          (sid
+            ? '<a class="btn btn-fire btn-sm ms-1" href="#/s/' + sid + '">' +
+              (canBuy ? "选择门店下单" : "进店选购") + "</a>"
+            : '<span class="text-muted small ms-2">暂未在门店上架</span>') +
+          "</div>";
+      }).join("") + "</div>"
     : "";
 
   const pkgs = m.packages || [];
-  const canBuy = !!(user && user.role === "consumer" && !isOwner);
+  const pkgStores = m.package_stores || {};
   const pkgHtml = pkgs.length
     ? '<div class="panel" style="margin-top:1.1rem"><h5><i class="bi bi-gift"></i> 优惠套餐</h5>' +
-      pkgs.map(p => '<div class="good-row"><div class="good-name"><b>' + LL.esc(p.name) + "</b><small>" +
-        LL.esc(p.content || "") + (p.valid_days ? " · 有效期 " + p.valid_days + " 天" : "") + "</small></div>" +
-        '<span class="good-price">' + LL.money(p.price) + '</span>' +
-        '<a class="btn btn-ghost btn-sm ms-2" href="#/talk/package/' + p.id + '">口碑评价 ›</a>' +
-        (canBuy ? '<button class="btn btn-fire btn-sm ms-1" data-buy-pkg="' + p.id +
-          '" data-name="' + LL.esc(p.name) + '">立即购买</button>' : "") +
-        "</div>").join("") + "</div>"
+      pkgs.map(p => {
+        const sid = firstStoreOf(pkgStores, p.id);
+        return '<div class="good-row"><div class="good-name"><b>' + LL.esc(p.name) + "</b><small>" +
+          LL.esc(p.content || "") + (p.valid_days ? " · 有效期 " + p.valid_days + " 天" : "") + "</small></div>" +
+          '<span class="good-price">' + LL.money(p.price) + '</span>' +
+          '<a class="btn btn-ghost btn-sm ms-2" href="#/talk/package/' + p.id + '">口碑评价 ›</a>' +
+          (sid
+            ? '<a class="btn btn-fire btn-sm ms-1" href="#/s/' + sid + '">' +
+              (canBuy ? "选择门店下单" : "进店选购") + "</a>"
+            : '<span class="text-muted small ms-2">暂未在门店上架</span>') +
+          "</div>";
+      }).join("") + "</div>"
     : "";
+
+  // 门店列表：消费者从这里进入门店选购页（下单主体为门店）
+  const storeList = m.stores || [];
+  const storeHtml = '<div class="panel" style="margin-top:1.1rem" id="storePanel"><h5><i class="bi bi-shop"></i> 门店（选择门店选购）</h5>' +
+    (storeList.length
+      ? storeList.map(st => {
+          const os = st.on_sale || {};
+          const desc = { open: "营业中", rest: "休息中", closed: "已打烊" }[st.status] || st.status;
+          return '<div class="good-row"><div class="good-name"><b>' + LL.esc(st.name) + "</b><small>" +
+            '<span class="badge-soft badge-' + LL.statusClass(st.status).replace("badge-", "") + '">' + desc + "</span> " +
+            LL.esc(st.area || "本城") + (st.address ? " · " + LL.esc(st.address) : "") +
+            " · 在售 服务 " + (os.services || 0) + " / 套餐 " + (os.packages || 0) + " / 活动 " + (os.coupons || 0) +
+            "</small></div>" +
+            '<a class="btn btn-main btn-sm ms-2" href="#/s/' + st.id + '">' +
+            (canBuy ? "进店选购 ›" : "查看门店 ›") + "</a></div>";
+        }).join("")
+      : emptyBox("该店铺还没有门店")) + "</div>";
 
   // 评价表单（消费者，非店主）
   let form = "";
@@ -301,9 +337,8 @@ LL.views.merchant = async function (el, id) {
   }
 
   el.innerHTML = '<div class="container-xl">' + hero + "</div>" +
-    (canBuy ? '<div class="container-xl mt-2" id="couponBand"></div>' : "") +
     '<div class="container-xl">' +
-    '<div class="row g-3 mt-2"><div class="col-lg-7">' + infoRow + svcHtml + pkgHtml + "</div>" +
+    '<div class="row g-3 mt-2"><div class="col-lg-7">' + infoRow + storeHtml + svcHtml + pkgHtml + "</div>" +
     '<div class="col-lg-5">' + form +
     '<div class="cat-chips mb-2" id="revTabs"></div>' +
     '<div id="revHead"></div><div id="revList"></div>' +
@@ -346,54 +381,8 @@ LL.views.merchant = async function (el, id) {
       } catch (e) { LL.toast(e.message, "err"); }
     });
 
-    // 领券区（消费者可见，数据来自公开优惠活动）
-    const band = document.getElementById("couponBand");
-    if (band) {
-      band.innerHTML = '<div class="panel"><div class="t-head"><h5><i class="bi bi-ticket-perforated"></i> 领券中心</h5></div><div class="p-3" id="cpnInner">加载中…</div></div>';
-      const inner = band.querySelector("#cpnInner");
-      const paintCoupons = async () => {
-        try {
-          const rows = await LL.api("GET", "/api/coupons?merchant_id=" + id);
-          const mine = await LL.api("GET", "/api/my/coupons?status=all");
-          const have = new Set(mine.map(x => Number(x.coupon_id)));
-          if (!rows.length) { inner.innerHTML = '<div class="text-muted small">掌柜暂未发布进行中的优惠活动</div>'; return; }
-          inner.innerHTML = '<div class="row g-2">' + rows.map(r => {
-            const val = r.type === "discount"
-              ? (Number(r.discount_rate) * 10).toFixed(1) + " 折" : "¥" + LL.money(r.face_value);
-            const limit = Number(r.threshold) ? "满 " + LL.money(r.threshold) + " 可用" : "无门槛";
-            return '<div class="col-md-6 col-xl-4"><div class="cpn-item d-flex align-items-center gap-2 border rounded p-2" style="border-color:var(--line)!important">' +
-              '<div class="text-center" style="flex:0 0 64px;color:#cf4a2b;font-weight:800;border-right:1px dashed #e4c4b8">' + val + "</div>" +
-              '<div style="flex:1;min-width:0"><div style="font-weight:600;font-size:13.5px">' + LL.esc(r.name) + "</div>" +
-              '<div class="text-muted" style="font-size:11.5px">' + LL.esc(r.merchant_name) + " · " + limit + "</div>" +
-              '<div class="text-muted" style="font-size:11.5px">至 ' + LL.esc(String(r.end_time || "").slice(0, 10)) + "</div></div>" +
-              (have.has(Number(r.id))
-                ? '<span class="btn btn-ghost btn-sm disabled">已领取</span>'
-                : '<button class="btn btn-fire btn-sm" data-receive="' + r.id + '">领取</button>') +
-              "</div></div>";
-          }).join("") + "</div>";
-          inner.querySelectorAll("[data-receive]").forEach(b => b.addEventListener("click", async () => {
-            try {
-              await LL.api("POST", "/api/coupon/" + b.dataset.receive + "/receive");
-              LL.toast("领取成功！可在「我的卡券」查看核销码", "ok");
-              await paintCoupons();
-            } catch (e) { LL.toast(e.message, "err"); }
-          }));
-        } catch (e) { inner.innerHTML = '<div class="text-muted small">优惠活动加载失败</div>'; }
-      };
-      paintCoupons();
-    }
-
-    // 套餐立即购买（下单后在我的套餐订单中核销）
-    document.querySelectorAll("[data-buy-pkg]").forEach(b => b.addEventListener("click", async () => {
-      if (!confirm("确认购买套餐「" + b.dataset.name + "」？可在“我的-套餐订单”中核销/退款。")) return;
-      const old = b.innerHTML;
-      b.disabled = true;
-      try {
-        const o = await LL.api("POST", "/api/package/" + b.dataset.buyPkg + "/buy");
-        LL.toast("下单成功，订单号 " + o.order_no + "，可在“我的-套餐订单”使用", "ok");
-        b.innerHTML = "已购买";
-      } catch (e) { LL.toast(e.message, "err"); b.innerHTML = old; b.disabled = false; }
-    }));
+    // 领券与购买均已下沉到门店页（#/s/{id}）：
+    // 商户详情页只做门店引导，避免绕过「门店是否参与该活动 / 是否上架该项目」的经营设置。
   }
 
   // 发表评价

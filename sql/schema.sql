@@ -233,6 +233,7 @@ CREATE TABLE IF NOT EXISTS consumption_records (
   id           INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id      INTEGER NOT NULL REFERENCES users (id),
   merchant_id  INTEGER NOT NULL REFERENCES merchants (id),
+  store_id     INTEGER REFERENCES stores (id),   -- 发生消费的门店
   service_id   INTEGER REFERENCES services (id),
   package_id   INTEGER REFERENCES packages (id),
   amount       REAL    DEFAULT 0,
@@ -274,18 +275,62 @@ CREATE TABLE IF NOT EXISTS coupon_user (
   UNIQUE (coupon_id, user_id)
 );
 
--- 21. 套餐订单
+-- 21. 订单（下单主体为「门店」；支持服务项目 / 优惠套餐两类商品）
 CREATE TABLE IF NOT EXISTS orders (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
   order_no   TEXT    NOT NULL UNIQUE,
   user_id    INTEGER NOT NULL REFERENCES users (id),
-  package_id INTEGER NOT NULL REFERENCES packages (id),
+  store_id   INTEGER REFERENCES stores (id),      -- 下单门店（消费者在哪个门店消费）
+  item_type  TEXT    NOT NULL DEFAULT 'package'
+             CHECK (item_type IN ('package', 'service')),
+  package_id INTEGER REFERENCES packages (id),    -- item_type=package 时有效
+  service_id INTEGER REFERENCES services (id),    -- item_type=service 时有效
   amount     REAL    NOT NULL,
   status     TEXT    NOT NULL DEFAULT 'purchased'
              CHECK (status IN ('purchased', 'used', 'refunded')),
   created_at TEXT    NOT NULL,
   used_time  TEXT
 );
+
+-- 21a. 门店经营项目上架关系：门店 × 服务项目（是否运营由门店决定）
+CREATE TABLE IF NOT EXISTS store_services (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  store_id   INTEGER NOT NULL REFERENCES stores (id),
+  service_id INTEGER NOT NULL REFERENCES services (id),
+  status     TEXT    NOT NULL DEFAULT 'on'
+             CHECK (status IN ('on', 'off')),
+  created_at TEXT    NOT NULL,
+  UNIQUE (store_id, service_id)
+);
+
+-- 21b. 门店经营项目上架关系：门店 × 优惠套餐
+CREATE TABLE IF NOT EXISTS store_packages (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  store_id   INTEGER NOT NULL REFERENCES stores (id),
+  package_id INTEGER NOT NULL REFERENCES packages (id),
+  status     TEXT    NOT NULL DEFAULT 'on'
+             CHECK (status IN ('on', 'off')),
+  created_at TEXT    NOT NULL,
+  UNIQUE (store_id, package_id)
+);
+
+-- 21c. 门店经营项目上架关系：门店 × 优惠活动（门店是否参与该活动）
+CREATE TABLE IF NOT EXISTS store_coupons (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  store_id   INTEGER NOT NULL REFERENCES stores (id),
+  coupon_id  INTEGER NOT NULL REFERENCES coupons (id),
+  status     TEXT    NOT NULL DEFAULT 'on'
+             CHECK (status IN ('on', 'off')),
+  created_at TEXT    NOT NULL,
+  UNIQUE (store_id, coupon_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_store_services_store ON store_services (store_id);
+CREATE INDEX IF NOT EXISTS idx_store_packages_store ON store_packages (store_id);
+CREATE INDEX IF NOT EXISTS idx_store_coupons_store  ON store_coupons (store_id);
+
+-- 说明：orders / consumption_records 在旧版库中缺少新列，其索引统一由 Migrate.h 建立
+-- （schema.sql 先于迁移执行，直接建索引会因“no such column”导致初始化失败）
 
 -- 22. 运营统计缓存表
 CREATE TABLE IF NOT EXISTS operation_stats (

@@ -1,5 +1,6 @@
 #include "controller/OrderController.h"
 
+#include "model/Models.h"
 #include "server/Api.h"
 #include "service/OrderService.h"
 #include "util/Json.h"
@@ -37,6 +38,18 @@ void OrderController::registerRoutes(httplib::Server& svr) {
         guard([&] {
             needLogin(req, res, "consumer", [&](const api::AuthCtx& ctx) {
                 sendOk(res, OrderService::buy(ctx.userId, idOf(req)));
+            });
+        }, res);
+    });
+
+    // POST /api/store/{id}/order 在指定门店下单（item_type: service / package）
+    svr.Post(R"(/api/store/(\d+)/order)", [](const httplib::Request& req, httplib::Response& res) {
+        guard([&] {
+            needLogin(req, res, "consumer", [&](const api::AuthCtx& ctx) {
+                auto body = parseBody(req);
+                sendOk(res, OrderService::buyAtStore(ctx.userId, std::stoll(req.matches[1].str()),
+                                                     jsonStr(body, "item_type"),
+                                                     jsonInt(body, "item_id")));
             });
         }, res);
     });

@@ -61,6 +61,8 @@ nlohmann::json CouponService::create(long long merchantUserId, const nlohmann::j
                         {"scope", jsonStr(body, "scope")}};
     auto id = CouponDao::create(m.value("id", 0LL), c);
     if (id == 0) throw BizError(resp::SERVER_ERROR, "创建优惠活动失败");
+    // 新活动默认参与本商户所有门店（可在「门店管理」按门店取消参与）
+    MerchantDao::fanoutItemToStores(m.value("id", 0LL), "coupon", id);
     return CouponDao::byId(id);
 }
 

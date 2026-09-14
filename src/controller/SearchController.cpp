@@ -63,6 +63,16 @@ void SearchController::registerRoutes(httplib::Server& svr) {
         }, res);
     });
 
+    // GET /api/stores/{id} 门店详情（消费者选购入口：本店在售服务/套餐/活动 + 门店口碑）
+    svr.Get(R"(/api/stores/(\d+))", [](const httplib::Request& req, httplib::Response& res) {
+        guard([&] {
+            auto ctx = api::authenticate(req);  // 可选鉴权
+            long long viewerId = ctx ? ctx->userId : 0;
+            std::string role = ctx ? ctx->role : "";
+            sendOk(res, SearchService::storeDetail(std::stoll(req.matches[1].str()), viewerId, role));
+        }, res);
+    });
+
     // 榜单
     svr.Get("/api/rank/hot", [](const httplib::Request&, httplib::Response& res) {
         guard([&] { sendOk(res, SearchService::hotRank()); }, res);

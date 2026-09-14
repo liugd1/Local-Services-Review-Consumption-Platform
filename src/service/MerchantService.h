@@ -26,6 +26,11 @@ public:
     static void updateStore(long long userId, long long storeId, const nlohmann::json& body);
     static void deleteStore(long long userId, long long storeId);
 
+    // ---- 门店经营项目上架（由门店决定本店是否运营某服务/套餐/活动）----
+    static nlohmann::json storeOfferings(long long userId, long long storeId);
+    static void setStoreOffering(long long userId, long long storeId, const nlohmann::json& body);
+    static void bulkStoreOffering(long long userId, long long storeId, const nlohmann::json& body);
+
     // ---- 服务项目 ----
     static nlohmann::json listServices(long long userId, const std::string& status);
     static nlohmann::json addService(long long userId, const nlohmann::json& body);

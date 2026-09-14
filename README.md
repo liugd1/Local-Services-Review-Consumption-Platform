@@ -28,12 +28,12 @@
 | # | 模块 | 能力 | 状态 |
 | --- | --- | --- | --- |
 | 1 | 用户与权限 | 注册 / 登录 / 登出 / 资料 / 偏好；三角色 RBAC；Token 会话（7 天） | ✅ |
-| 2 | 商户经营 | 入驻申请 → 审核（驳回可改资料重提；审核期间仅可查看状态与完善资料）；门店 / 服务 / 套餐维护；图片上传 | ✅ |
+| 2 | 商户经营 | 入驻申请 → 审核（驳回可改资料重提；审核期间仅可查看状态与完善资料）；店铺级维护门店 / 服务 / 套餐；**按门店决定是否上架**；图片上传 | ✅ |
 | 3 | 检索与榜单 | 关键词 / 类别 / 区域 / 价格 / 评分组合检索；人气热榜、新店、分类榜；详情浏览计数 | ✅ |
 | 4 | 收藏与互动 | 收藏（商户 / 服务）、关注、浏览足迹、消费记账 | ✅ |
 | 5 | 评分与评价 | 对象化解构评价（一对象一评）、三维评分、图文、点赞、任意层回复、举报、掌柜回复 | ✅ |
 | 6 | 优惠活动 | 券 / 满减 / 折扣 / 套餐券；创建→上下线；领取防超发限领一张；核销码校验 | ✅ |
-| 7 | 套餐订单 | 限购校验下单 → 核销自动落消费流水 → 未使用可退款（状态机） | ✅ |
+| 7 | 门店订单 | **在门店下单**（服务项目 / 优惠套餐）→ 核销自动落消费流水 → 未使用可退款（状态机） | ✅ |
 | 8 | 统计看板 | 商户经营看板 + 平台运营看板；近 7 日趋势、热门服务、类别分布（ECharts） | ✅ |
 
 ---
@@ -117,14 +117,26 @@ build/locallife.exe          # Windows
   成功后写入 `used_time` 并累加 `used`，二次核销返回 409。
 - 消费者可在「我的卡券」查看全部 / 未使用 / 已使用，并出示核销码。
 
-### 4.3 套餐订单（模块 7）
+### 4.3 门店订单（模块 6 / 7）
 
+> **下单主体是「门店」而不是「店铺」**：一家店铺可以有多个门店（分布在不同的区域），
+> 消费者需要先进入店铺、再选择具体门店，最后在该门店选购服务项目或优惠套餐。
+
+- **门店经营项目（上架关系）**：服务项目 / 优惠套餐 / 优惠活动统一在**店铺层级**创建与删除；
+  每家门店通过 `store_services` / `store_packages` / `store_coupons` 决定**本店是否运营（上架）**某项，
+  未上架的项目不会出现在该门店的选购页，也不能在该门店下单（返回 409）。
 - **状态机**：`purchased`（待使用）→ `used`（已核销）｜ `purchased` → `refunded`（已退款）；
   已使用不可退款，重复核销 / 重复退款均返回 409。
-- **下单**：校验套餐为 `on` 且所属商户 `approved`，按 `limit_count` 做每人限购校验，生成唯一订单号
-  （`yyyyMMddHHmmss` + 4 位随机）并快照金额。
-- **核销联动**：核销时在同一业务动作内将订单置为 `used` 并**自动写入一条消费流水**
-  （金额、商户、套餐），因此「我的消费记录」与「商户经营统计」即时同步。
+- **下单**：校验门店存在且未打烊 → 店铺 `approved` → 项目属于该店铺 → **该项目在本门店已上架** →
+  按 `limit_count` 做每人限购校验 → 生成唯一订单号并快照金额（订单记录 `store_id + item_type + 项目 id`）。
+- **核销联动**：核销时在同一业务动作内把订单置为 `used` 并**自动写入消费流水**
+  （金额、商户、门店、服务/套餐），因此「我的消费记录」与「商户经营统计」即时同步。
+- 消费者在「我的 → 我的订单」中查看门店 / 项目 / 类型（服务/套餐）并一键「去使用 / 退款」；
+  店铺详情页提供门店列表（含各店在售数量）作为选购入口。
+
+> 说明：为兼容历史数据，`POST /api/package/{id}/buy` 仍保留（自动选取任一在售该套餐的门店），
+> 但前端已不再提供「店铺层级直接下单」入口。
+
 - 消费者在「我的 → 套餐订单」中一键「去使用 / 退款」；详情页套餐行提供「立即购买」。
 
 ### 4.4 统计看板（模块 8 + 可视化）
@@ -143,8 +155,9 @@ build/locallife.exe          # Windows
 | 页面 | 路由 | 截图 |
 | --- | --- | --- |
 | 首页（Hero + 榜单） | `#/` | `docs/screens/1_home.png` |
-| 商户详情（评价 tab / 发评上传） | `#/m/{id}` | `docs/screens/2_detail.png`、`10_detail_tabs.png`、`11_review_uploader.png` |
+| 商户详情（含评论 tab / 门店入口） | `#/m/{id}` | `docs/screens/2_detail.png`、`10_detail_tabs.png`、`11_review_uploader.png` |
 | 对象口碑页（独立评论区） | `#/talk/{type}/{id}` | `docs/screens/9_talk_service.png` |
+| **门店选购页（下单入口）** | `#/s/{id}` | 门店信息 + 本店在售服务/套餐 + 本店优惠活动 |
 | 搜索与筛选 | `#/s?kw=&category=&sort=` | `docs/screens/7_search.png` |
 | 我的（资料 / 收藏 / 消费 / 评价） | `#/me?tab=…` | `docs/screens/3_me.png` |
 | 掌柜工作台（概览 / 服务） | `#/shop?tab=…` | `docs/screens/5_shop.png`、`8_shop_services.png` |
@@ -164,7 +177,7 @@ build/locallife.exe          # Windows
 | 层 | 选型 |
 | --- | --- |
 | 后端 | C++17；cpp-httplib（RESTful 路由，`:param` 风格）；nlohmann/json（请求/响应 JSON） |
-| 存储 | SQLite 3.53.4（单文件，随仓内置 amalgamation）；`sql/schema.sql` 24 张业务表 |
+| 存储 | SQLite 3.53.4（单文件，随仓内置 amalgamation）；`sql/schema.sql` 27 张业务表 |
 | 安全 | 口令 PicoSHA2 加盐哈希；Bearer Token 会话（7 天）；参数绑定防 SQL 注入 |
 | 并发 | 单连接 + FULLMUTEX + 互斥锁；写操作 `BEGIN IMMEDIATE`；领取等场景用原子 UPDATE 防超发 |
 | 前端 | 原生 HTML / CSS / JS（无框架）SPA + hash 路由；Bootstrap 5.3 + Bootstrap Icons（CDN）；ECharts 5.5 |
@@ -179,7 +192,7 @@ build/locallife.exe          # Windows
 ```
 Local-Services-Review-Consumption-Platform/
 ├── CMakeLists.txt                  构建脚本（C++17、随仓依赖、静态资源)
-├── sql/schema.sql                  24 张业务表（幂等 DDL）+ 分类初始数据
+├── sql/schema.sql                  27 张业务表（幂等 DDL）+ 分类初始数据
 ├── src/
 │   ├── main.cpp                    程序入口：初始化 DB → 迁移 → 启动 HTTP 服务
 │   ├── server/Api.{h,cpp}          统一 JSON 响应、鉴权中间件、路由注册
@@ -196,7 +209,7 @@ Local-Services-Review-Consumption-Platform/
 ├── public/                         前端静态资源（HTTP 根）
 │   ├── index.html                  单页入口（hash 路由 + CDN 资源 + ?v= 缓存版本号）
 │   ├── css/style.css               品牌样式（"巷味 · 本地生活志"视觉体系）
-│   ├── js/                         common / home / talk / user / shop / admin / app
+│   ├── js/                         common / home / store / talk / user / shop / admin / app
 │   └── uploads/                    用户上传图片（运行期生成，不入库）
 ├── third_party/                    随仓依赖：httplib / json / picosha2 / sqlite3
 ├── docs/screens/                   页面截图（含 modules678/ 新模块验证图）
@@ -214,7 +227,7 @@ Local-Services-Review-Consumption-Platform/
 | 评价体系 | `reviews`、`review_images`、`review_likes`、`review_replies`、`review_reports` | 对象化评价、晒图、点赞、掌柜回复、举报 |
 | 评论互动 | `review_comments`（自引用 `parent_id` 支持任意层）、`comment_likes`、`comment_reports` | 评论楼、评论点赞、评论举报 |
 | 用户行为 | `favorites`、`follows`、`browse_history`、`consumption_records` | 收藏、关注、浏览足迹、消费流水 |
-| 营销与交易 | `coupons`、`coupon_user`、`orders` | 优惠活动、领券记录（含核销码 / 状态）、套餐订单 |
+| 营销与交易 | `coupons`、`coupon_user`、`orders`、`store_services`、`store_packages`、`store_coupons` | 优惠活动、领券记录（含核销码 / 状态）、**门店订单**（`store_id + item_type + 项目 id`）、门店级上架关系 |
 | 平台 | `operation_stats` | 平台运营指标留存 |
 
 **一致性约定**
@@ -250,6 +263,7 @@ Local-Services-Review-Consumption-Platform/
 | --- | --- |
 | 入驻申请 / 我的商户 | `POST /api/merchant/apply`、`GET|PUT /api/merchant/me` |
 | 门店 / 服务 / 套餐 | `/api/merchant/stores`、`/api/merchant/services`、`/api/merchant/packages`（增删改查 + 状态） |
+| 门店经营项目（上架） | `GET /api/merchant/stores/{id}/offerings`、`PUT .../offerings`（单项）、`PUT .../offerings/bulk`（批量） |
 | 掌柜回复评价 | `POST /api/merchant/review/{id}/reply` |
 | 优惠活动管理 | `GET|POST /api/merchant/coupons`、`PUT /api/merchant/coupons/{id}/status` |
 | 优惠券核销 | `POST /api/merchant/coupon/verify` |
@@ -263,6 +277,7 @@ Local-Services-Review-Consumption-Platform/
 | 组合搜索 | `GET /api/search?keyword=&category=&area=&price_min=&price_max=&min_score=&sort=&page=` |
 | 榜单 | `GET /api/hot`、`/api/new`、`/api/categories`、`/api/categories/{id}/merchants` |
 | 商户详情（含浏览计数） | `GET /api/merchants/{id}` |
+| **门店详情（选购入口）** | `GET /api/stores/{id}`（门店信息 + 本店在售服务/套餐/活动 + 门店口碑汇总） |
 | 某商户可领券列表 | `GET /api/coupons?merchant_id=` |
 
 ### 9.4 评价与评论（模块 5）
@@ -276,14 +291,15 @@ Local-Services-Review-Consumption-Platform/
 | 评论互动 | `POST|DELETE /api/comments/{id}/like`、`POST /api/comments/{id}/report`、`DELETE /api/comments/{id}` |
 | 评价互动 | `POST|DELETE /api/review/{id}/like`、`POST /api/review/{id}/report`、`DELETE /api/review/{id}` |
 
-### 9.5 优惠券与订单（模块 6 / 7）
+### 9.5 优惠券与门店订单（模块 6 / 7）
 
 | 说明 | 方法与路径 |
 | --- | --- |
 | 领取优惠券 | `POST /api/coupon/{id}/receive` |
 | 我的卡券 | `GET /api/my/coupons?status=unused|used|all` |
-| 购买套餐 | `POST /api/package/{id}/buy` |
-| 我的套餐订单 | `GET /api/my/orders?status=purchased|used|refunded|all&page=&size=` |
+| **门店下单（服务 / 套餐）** | `POST /api/store/{id}/order`（body：`item_type=service\|package`、`item_id`） |
+| 购买套餐（兼容旧接口） | `POST /api/package/{id}/buy`（自动选取在售该套餐的门店） |
+| 我的订单 | `GET /api/my/orders?status=purchased|used|refunded|all&page=&size=` |
 | 核销套餐 | `POST /api/order/{id}/use` |
 | 退款套餐 | `POST /api/order/{id}/refund` |
 
@@ -310,6 +326,13 @@ Local-Services-Review-Consumption-Platform/
 - 六个新页面渲染正常且 **控制台 0 错误**；
 - 页面内完成「领券 → 详情购买套餐 → 我的订单出现待使用 → 点击核销 → 状态变为已使用」完整闭环；
 - 截图见 `docs/screens/modules678/`。
+
+**门店下单与门店级上架（本轮新增，Playwright headless 22/22 通过）**：
+
+- 场景一（消费者）：进入店铺 → 从「门店（选择门店选购）」进入门店选购页 → 选购在售服务 / 套餐并下单 → 「我的订单」显示门店、项目类型与名称；
+- 场景二（店铺主）：在掌柜台「服务项目」创建项目（店铺级）→ 进入「门店管理 → 经营项目」按门店上架 / 下架（支持批量）→
+  下架后消费者侧不可见、直接调用下单接口返回 409，重新上架后恢复可见可下单；
+- 后端回归：订单归属门店、老库升级（历史订单自动回填门店、门店上架关系回填）、越权（消费者调用掌柜接口 403、跨店操作 404）均通过。
 
 **已知边界**
 

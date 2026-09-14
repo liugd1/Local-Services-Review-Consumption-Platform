@@ -102,13 +102,15 @@ async function shopStores(main, data) {
   const badge = s => '<span class="badge-soft badge-' + LL.statusClass(s).replace("badge-", "") + '">' + LL.statusZh(s) + "</span>";
   main.innerHTML = '<div class="table-card"><div class="t-head"><h5>门店管理</h5>' +
     '<button class="btn btn-main btn-sm" onclick="LL.openStoreForm()"><i class="bi bi-plus-lg"></i> 新增门店</button></div>' +
-    '<table class="table"><thead><tr><th>门店</th><th>地址</th><th>区域</th><th>状态</th><th style="width:230px">操作</th></tr></thead><tbody>' +
+    '<table class="table"><thead><tr><th>门店</th><th>地址</th><th>区域</th><th>状态</th><th style="width:330px">操作</th></tr></thead><tbody>' +
     (rows.map(s => "<tr><td><b>" + LL.esc(s.name) + "</b></td><td>" + LL.esc(s.address || "—") + "</td><td>" + LL.esc(s.area || "—") +
       "</td><td>" + badge(s.status) + '</td><td><div class="btn-group btn-group-sm">' +
+      '<button class="btn btn-main" data-offer="' + s.id + '" data-name="' + LL.esc(s.name) + '">经营项目</button>' +
       '<button class="btn btn-ghost" data-edit="' + s.id + '">编辑</button>' +
       '<button class="btn btn-ghost text-danger" data-del="' + s.id + '">删除</button></div></td></tr>').join("") ||
       '<tr><td colspan="5">' + emptyBox("还没有门店，先新增一家吧") + "</td></tr>") +
     "</tbody></table></div>" +
+    '<div class="panel mt-3" id="offerPanel" style="display:none"></div>' +
     '<div class="panel mt-3" id="storeFormBox" style="display:none"><h5 id="storeFormTitle">新增门店</h5>' +
     '<form id="storeForm" class="row g-3"><input type="hidden" name="id">' +
     '<div class="col-md-6"><label class="form-label">门店名称 *</label><input class="form-control" name="name"></div>' +
@@ -116,7 +118,7 @@ async function shopStores(main, data) {
     '<option value="open">营业中</option><option value="rest">休息中</option><option value="closed">已打烊</option></select></div>' +
     '<div class="col-md-6"><label class="form-label">地址</label><input class="form-control" name="address"></div>' +
     '<div class="col-md-6"><label class="form-label">区域</label><input class="form-control" name="area"></div>' +
-    '<div class="col-12"><button class="btn btn-main">保存</button> <button type="button" class="btn btn-ghost" id="storeCancel">取消</button></div>' +
+    '<div class="col-12"><button class="btn btn-main" type="submit">保存</button> <button type="button" class="btn btn-ghost" id="storeCancel">取消</button></div>' +
     "</form></div>";
 
   const box = main.querySelector("#storeFormBox");
@@ -145,13 +147,96 @@ async function shopStores(main, data) {
       LL.toast("已保存", "ok"); location.reload();
     } catch (err) { LL.toast(err.message, "err"); }
   });
+
+  // ---- 门店经营项目配置：由门店决定是否运营某个服务 / 套餐 / 活动 ----
+  const panel = main.querySelector("#offerPanel");
+  const GROUPS = [
+    { key: "services", type: "service", title: "招牌服务", unit: "¥" },
+    { key: "packages", type: "package", title: "优惠套餐", unit: "¥" },
+    { key: "coupons", type: "coupon", title: "优惠活动", unit: "" }
+  ];
+
+  const loadOfferings = async (storeId, storeName) => {
+    panel.style.display = "";
+    panel.innerHTML = '<div class="text-muted">加载中…</div>';
+    let d;
+    try { d = await LL.api("GET", "/api/merchant/stores/" + storeId + "/offerings"); }
+    catch (e) { panel.innerHTML = '<div class="text-muted">' + LL.esc(e.message) + "</div>"; return; }
+
+    let html = '<div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">' +
+      '<h5 style="margin:0"><i class="bi bi-sliders"></i> 「' + LL.esc(storeName) + '」经营项目</h5>' +
+      '<div><span class="text-muted small me-2">在售：服务 ' + ((d.counts || {}).services || 0) +
+      ' · 套餐 ' + ((d.counts || {}).packages || 0) + ' · 活动 ' + ((d.counts || {}).coupons || 0) + '</span>' +
+      '<button class="btn btn-ghost btn-sm" id="offerClose">收起</button></div></div>' +
+      '<div class="text-muted mb-3" style="font-size:12.5px">服务项目 / 优惠套餐 / 优惠活动由店铺统一创建与删除，' +
+      '此处决定<b>本门店是否运营（上架）</b>；未上架的项目不会出现在消费者在本门店的选购页。</div>';
+
+    GROUPS.forEach(g => {
+      const list = d[g.key] || [];
+      html += '<div class="panel mb-3" style="box-shadow:none">' +
+        '<div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-1">' +
+        '<b>' + g.title + '（' + list.length + '）</b>' +
+        '<div class="btn-group btn-group-sm">' +
+        '<button class="btn btn-ghost" data-bulk="' + g.type + ':on">全部上架</button>' +
+        '<button class="btn btn-ghost" data-bulk="' + g.type + ':off">全部下架</button></div></div>' +
+        (list.length
+          ? list.map(it => {
+              const on = it.store_status === "on";
+              const itemOff = it.item_status === "off" || it.item_status === "draft" ||
+                              it.item_status === "offline";
+              const price = (it.price !== undefined && g.unit) ? ' <span class="text-muted small">' + g.unit + LL.money(it.price) + "</span>" : "";
+              return '<div class="d-flex align-items-center justify-content-between border-top py-2">' +
+                '<div><b>' + LL.esc(it.name) + "</b>" + price +
+                (itemOff ? ' <span class="badge-soft badge-rest">项目已下架</span>'
+                         : (it.item_status === "published" ? ' <span class="badge-soft badge-approved">活动进行中</span>' : "")) + "</div>" +
+                '<button class="btn btn-sm ' + (on ? "btn-main" : "btn-ghost") + '" data-item="' + g.type + ":" + it.id +
+                '" data-status="' + (on ? "off" : "on") + '"' + (itemOff ? " disabled" : "") + ">" +
+                (on ? "已上架 · 点击下架" : "未上架 · 点击上架") + "</button></div>";
+            }).join("")
+          : '<div class="text-muted small border-top pt-2">暂无项目，请先到「' + g.title + '」页签创建</div>') +
+        "</div>";
+    });
+    panel.innerHTML = html;
+
+    panel.querySelector("#offerClose").addEventListener("click", () => {
+      panel.style.display = "none";
+    });
+    const reload = () => loadOfferings(storeId, storeName);
+    panel.querySelectorAll("[data-item]").forEach(b => b.addEventListener("click", async () => {
+      const [type, itemId] = b.dataset.item.split(":");
+      b.disabled = true;
+      try {
+        await LL.api("PUT", "/api/merchant/stores/" + storeId + "/offerings",
+          { item_type: type, item_id: Number(itemId), status: b.dataset.status });
+        LL.toast(b.dataset.status === "on" ? "已在本门店上架" : "已在本门店下架", "ok");
+        await reload();
+      } catch (e) { LL.toast(e.message, "err"); b.disabled = false; }
+    }));
+    panel.querySelectorAll("[data-bulk]").forEach(b => b.addEventListener("click", async () => {
+      const [type, status] = b.dataset.bulk.split(":");
+      if (!confirm((status === "on" ? "全部上架" : "全部下架") + "本门店的这类项目？")) return;
+      b.disabled = true;
+      try {
+        await LL.api("PUT", "/api/merchant/stores/" + storeId + "/offerings/bulk",
+          { item_type: type, status: status });
+        LL.toast("已批量" + (status === "on" ? "上架" : "下架"), "ok");
+        await reload();
+      } catch (e) { LL.toast(e.message, "err"); b.disabled = false; }
+    }));
+  };
+
+  main.querySelectorAll("[data-offer]").forEach(b => b.addEventListener("click", () => {
+    loadOfferings(Number(b.dataset.offer), b.dataset.name);
+  }));
 }
 
 /* 服务项目管理 */
 async function shopServices(main, data) {
   const rows = data.services || [];
   const badge = s => '<span class="badge-soft badge-' + LL.statusClass(s).replace("badge-", "") + '">' + (s === "on" ? "已上架" : "已下架") + "</span>";
-  main.innerHTML = '<div class="table-card"><div class="t-head"><h5>服务项目</h5>' +
+  main.innerHTML = '<div class="panel mb-3" style="border-left:3px solid var(--persimmon)"><b><i class="bi bi-info-circle"></i> 服务项目为「店铺级」定义</b>' +
+    '<p class="mb-0 text-muted" style="font-size:12.5px">在此创建/修改/删除服务项目；是否在某家门店运营，请到「门店管理 → 经营项目」按门店上架或下架。</p></div>' +
+    '<div class="table-card"><div class="t-head"><h5>服务项目</h5>' +
     '<button class="btn btn-main btn-sm" id="svcAdd"><i class="bi bi-plus-lg"></i> 新增服务</button></div>' +
     '<table class="table"><thead><tr><th>服务</th><th>价格</th><th>时段/门店</th><th>状态</th><th style="width:230px">操作</th></tr></thead><tbody>' +
     (rows.map(s => "<tr><td><b>" + LL.esc(s.name) + "</b></td><td class='price-min'>" + LL.money(s.price) +
@@ -169,7 +254,7 @@ async function shopServices(main, data) {
     '<div class="col-md-6"><label class="form-label">适用时间</label><input class="form-control" name="applicable_time" placeholder="如：工作日 14:00-17:00"></div>' +
     '<div class="col-md-3"><label class="form-label">库存（-1 不限）</label><input class="form-control" name="stock" type="number" value="-1"></div>' +
     '<div class="col-md-3"><label class="form-label">每人限购</label><input class="form-control" name="limit_count" type="number" value="0"></div>' +
-    '<div class="col-12"><button class="btn btn-main">保存</button> <button type="button" class="btn btn-ghost" id="svcCancel">取消</button></div></form></div>';
+    '<div class="col-12"><button class="btn btn-main" type="submit">保存</button> <button type="button" class="btn btn-ghost" id="svcCancel">取消</button></div></form></div>';
 
   const box = main.querySelector("#svcFormBox");
   const open = s => {
@@ -208,7 +293,9 @@ async function shopServices(main, data) {
 async function shopPackages(main, data) {
   const rows = data.packages || [];
   const badge = s => '<span class="badge-soft badge-' + LL.statusClass(s).replace("badge-", "") + '">' + (s === "on" ? "已上架" : "已下架") + "</span>";
-  main.innerHTML = '<div class="table-card"><div class="t-head"><h5>优惠套餐</h5>' +
+  main.innerHTML = '<div class="panel mb-3" style="border-left:3px solid var(--persimmon)"><b><i class="bi bi-info-circle"></i> 优惠套餐为「店铺级」定义</b>' +
+    '<p class="mb-0 text-muted" style="font-size:12.5px">在此创建/修改/删除套餐；是否在某家门店售卖，请到「门店管理 → 经营项目」按门店上架或下架。</p></div>' +
+    '<div class="table-card"><div class="t-head"><h5>优惠套餐</h5>' +
     '<button class="btn btn-main btn-sm" id="pkgAdd"><i class="bi bi-plus-lg"></i> 新增套餐</button></div>' +
     '<table class="table"><thead><tr><th>套餐</th><th>内容</th><th>价格</th><th>状态</th><th style="width:230px">操作</th></tr></thead><tbody>' +
     (rows.map(p => "<tr><td><b>" + LL.esc(p.name) + "</b></td><td class='text-muted' style='font-size:12px'>" + LL.esc((p.content || "").slice(0, 30)) +
@@ -224,7 +311,7 @@ async function shopPackages(main, data) {
     '<div class="col-md-3"><label class="form-label">价格（元）</label><input class="form-control" name="price" type="number" step="0.01" min="0"></div>' +
     '<div class="col-md-3"><label class="form-label">有效期（天）</label><input class="form-control" name="valid_days" type="number" value="30"></div>' +
     '<div class="col-12"><label class="form-label">套餐内容</label><textarea class="form-control" name="content" rows="2"></textarea></div>' +
-    '<div class="col-12"><button class="btn btn-main">保存</button> <button type="button" class="btn btn-ghost" id="pkgCancel">取消</button></div></form></div>';
+    '<div class="col-12"><button class="btn btn-main" type="submit">保存</button> <button type="button" class="btn btn-ghost" id="pkgCancel">取消</button></div></form></div>';
 
   const box = main.querySelector("#pkgFormBox");
   const open = p => {
@@ -423,6 +510,8 @@ async function shopStats(main) {
 /* 优惠活动（创建 / 上下线 / 核销） */
 async function shopCoupons(main, data) {
   main.innerHTML =
+    '<div class="panel mb-3" style="border-left:3px solid var(--persimmon)"><b><i class="bi bi-info-circle"></i> 优惠活动为「店铺级」定义</b>' +
+    '<p class="mb-0 text-muted" style="font-size:12.5px">在此创建/上线活动；是否在某家门店参与（可领券），请到「门店管理 → 经营项目」按门店上架或下架。</p></div>' +
     '<div class="panel mb-3"><h5><i class="bi bi-ticket-perforated"></i> 发布新活动</h5>' +
     '<form id="cpnForm" class="row g-3">' +
     '<div class="col-md-3"><label class="form-label">类型</label><select name="type" class="form-select">' +
