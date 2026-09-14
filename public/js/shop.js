@@ -21,10 +21,14 @@ LL.views.shop = async function (el, tab) {
   const data = await loadMyMerchant();
   if (!data) { el.innerHTML = '<div class="container-xl">' + emptyBox("暂未入驻商户，请先提交入驻申请") + "</div>"; return; }
   const m = data.merchant;
-  const tabs = [["overview", "bi-speedometer2", "经营概览"], ["stores", "bi-shop", "门店管理"],
+  // 未通过审核时只开放「经营概览」（完善资料 / 查看审核状态），
+  // 门店、服务、套餐、优惠活动、回复评价、统计均需审核通过后使用
+  const approved = m.status === "approved";
+  const allTabs = [["overview", "bi-speedometer2", "经营概览"], ["stores", "bi-shop", "门店管理"],
     ["services", "bi-list-check", "服务项目"], ["packages", "bi-gift", "优惠套餐"],
     ["coupons", "bi-ticket-perforated", "优惠活动"], ["reply", "bi-chat-left-text", "回复评价"],
     ["stats", "bi-bar-chart-line", "经营统计"]];
+  const tabs = approved ? allTabs : allTabs.filter(t => t[0] === "overview");
   const active = tabs.some(t => t[0] === tab) ? tab : "overview";
   const links = tabs.map(t =>
     '<a class="ws-link' + (t[0] === active ? " active" : "") + '" href="#/shop?tab=' + t[0] + '"><i class="bi ' + t[1] + '"></i>' + t[2] + "</a>").join("") +
@@ -42,6 +46,14 @@ LL.views.shop = async function (el, tab) {
 async function shopOverview(main, data) {
   const m = data.merchant, cats = await LL.api("GET", "/api/categories");
   main.innerHTML = statusBanner(m) +
+    (m.status !== "approved"
+      ? '<div class="panel mb-3"><b><i class="bi bi-info-circle"></i> 审核通过后开放经营功能</b>' +
+        '<p class="mb-0 text-muted" style="font-size:13px">' +
+        (m.status === "rejected"
+          ? "请在下方核对并修改店铺资料，然后点击「保存并重新提交审核」重新提交。"
+          : "你可以在下方核对并修改店铺资料；平台审核通过后，即可管理门店 / 服务 / 套餐、发布优惠活动并查看经营统计。") +
+        "</p></div>"
+      : "") +
     '<div class="stat-cards"><div class="stat-card"><i class="bi bi-eye ic"></i><b>' + (m.view_count || 0) +
     '</b><span>总浏览量</span></div><div class="stat-card"><i class="bi bi-chat-square-text ic"></i><b>' + (data.reviews ? "—" : "—") +
     '</b><span>评价（在店铺页查看）</span></div><div class="stat-card"><i class="bi bi-list-check ic"></i><b>' + (data.services || []).length +
@@ -275,13 +287,12 @@ async function shopReply(main, data) {
   }));
 }
 
-/* 同步当前用户资料（入驻后角色变化） */
+/* 同步当前用户资料（入驻后角色变为 merchant，需刷新本地登录态） */
 async function refreshStoredUser() {
   try {
     const p = await LL.api("GET", "/api/user/profile");
     const u = p.user;
-    const old = LL.user;
-    if (old && old.token) LL.setAuth(old.token, u);
+    if (u && LL.token) LL.setAuth(LL.token, u);
   } catch (e) {}
 }
 
@@ -289,6 +300,11 @@ async function refreshStoredUser() {
 LL.views.apply = async function (el) {
   const user = LL.user;
   if (!user) { el.innerHTML = ""; LL.openAuth("login"); return; }
+  if (user.role === "admin") {
+    el.innerHTML = '<div class="container-xl">' + emptyBox("平台管理员账号不能申请入驻，请使用普通用户身份提交入驻申请") +
+      '<div class="text-center mt-3"><a class="btn btn-main" href="#/admin">返回平台管理</a></div></div>';
+    return;
+  }
   let existed = null, msg = "";
   if (user.role === "merchant") {
     try {
@@ -328,24 +344,36 @@ LL.views.apply = async function (el) {
     '<div class="col-md-6"><label class="form-label">人均价格区间 *</label><div class="input-group"><input class="form-control" name="price_min" type="number" min="0" value="' + (pre.price_min || 50) + '">' +
     '<span class="input-group-text">至</span><input class="form-control" name="price_max" type="number" min="0" value="' + (pre.price_max || 200) + '"></div></div>' +
     '<div class="col-12"><label class="form-label">门店介绍</label><textarea class="form-control" name="intro" rows="3">' + LL.esc(pre.intro || "") + "</textarea></div>" +
-    '<div class="col-12"><button class="btn btn-fire btn-lg px-5">' + (existed ? "重新提交入驻申请" : "提交入驻申请") + "</button>" +
+    '<div class="col-12"><button class="btn btn-fire btn-lg px-5" type="submit" id="applySubmit">' + (existed ? "重新提交入驻申请" : "提交入驻申请") + "</button>" +
     " <span class='text-muted small ms-2'>提交即代表同意平台商户规范</span></div></form></div></div>";
 
   document.getElementById("applyForm").addEventListener("submit", async e => {
-    e.preventDefault(); const f = e.target;
+    e.preventDefault();
+    const f = e.target;
     const body = {
       name: f.name.value.trim(), category_id: f.category_id.value, area: f.area.value.trim(),
       business_hours: f.business_hours.value.trim(), phone: f.phone.value.trim(),
       price_min: Number(f.price_min.value), price_max: Number(f.price_max.value), intro: f.intro.value.trim()
     };
-    const btn = f.querySelector("button[type=submit]");
-    btn.disabled = true;
+    // 提交前本地校验（与后端规则一致，避免无谓往返）
+    if (!body.name) { LL.toast("请填写店铺名称", "err"); f.name.focus(); return; }
+    if (!body.category_id) { LL.toast("请选择所属类别", "err"); return; }
+    if (!body.phone) { LL.toast("请填写联系电话", "err"); f.phone.focus(); return; }
+    if (body.price_min < 0 || (body.price_max > 0 && body.price_min > body.price_max)) {
+      LL.toast("价格区间设置不正确：人均下限不能高于上限", "err"); f.price_min.focus(); return;
+    }
+    const btn = f.querySelector("#applySubmit") || f.querySelector("button[type=submit]") || f.querySelector("button");
+    const raw = btn ? btn.innerHTML : "";
+    if (btn) { btn.disabled = true; btn.innerHTML = "提交中…"; }
     try {
       await LL.api("POST", "/api/merchant/apply", body);
       LL.toast("入驻申请已提交，等待平台审核 🎉", "ok");
-      await refreshStoredUser();
-      setTimeout(() => location.hash = "#/shop", 900);
-    } catch (err) { LL.toast(err.message, "err"); btn.disabled = false; }
+      await refreshStoredUser();          // 角色已升级为 merchant
+      location.hash = "#/shop";           // 进入工作台查看审核状态
+    } catch (err) {
+      LL.toast(err.message, "err");
+      if (btn) { btn.disabled = false; btn.innerHTML = raw; }
+    }
   });
 };
 

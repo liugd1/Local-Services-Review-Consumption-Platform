@@ -13,6 +13,8 @@ void MerchantController::registerRoutes(httplib::Server& svr) {
         guard([&] {
             auto ctx = api::authenticate(req);
             if (!ctx) throw BizError(resp::UNAUTHORIZED, "未登录");
+            if (ctx->role == "admin")
+                throw BizError(resp::FORBIDDEN, "平台管理员账号不能申请入驻，请使用普通用户身份提交");
             sendOk(res, MerchantService::apply(ctx->userId, parseBody(req)));
         }, res);
     });
