@@ -140,10 +140,11 @@ nlohmann::json listStores(long long merchantId) {
 
 long long addStore(long long merchantId, const nlohmann::json& s) {
     auto row = Database::instance().queryOne(
-        "INSERT INTO stores (merchant_id, name, address, area, status, created_at) "
-        "VALUES (?, ?, ?, ?, ?, ?) RETURNING id",
+        "INSERT INTO stores (merchant_id, name, address, area, images, status, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id",
         {std::to_string(merchantId), jsonStr(s, "name"), jsonStr(s, "address"),
-         jsonStr(s, "area"), jsonStr(s, "status", "open"), timeutil::nowStr()});
+         jsonStr(s, "area"), jsonArrayToCsv(s, "images"), jsonStr(s, "status", "open"),
+         timeutil::nowStr()});
     long long id = row.is_null() ? 0 : row.value("id", 0LL);
     // 新门店默认上架该商户现有的服务 / 套餐 / 活动（可随后按门店下架）
     if (id > 0) fanoutStoreItems(merchantId, id);
@@ -152,9 +153,9 @@ long long addStore(long long merchantId, const nlohmann::json& s) {
 
 void updateStore(long long id, const nlohmann::json& s) {
     Database::instance().execute(
-        "UPDATE stores SET name = ?, address = ?, area = ?, status = ? WHERE id = ?",
-        {jsonStr(s, "name"), jsonStr(s, "address"), jsonStr(s, "area"), jsonStr(s, "status"),
-         std::to_string(id)});
+        "UPDATE stores SET name = ?, address = ?, area = ?, images = ?, status = ? WHERE id = ?",
+        {jsonStr(s, "name"), jsonStr(s, "address"), jsonStr(s, "area"),
+         jsonArrayToCsv(s, "images"), jsonStr(s, "status"), std::to_string(id)});
 }
 
 bool removeStore(long long id) {
@@ -191,23 +192,23 @@ long long addService(long long merchantId, const nlohmann::json& s) {
     if (storeId.empty()) {
         row = db.queryOne(
             "INSERT INTO services (merchant_id, store_id, name, price, price_unit, "
-            "applicable_time, stock, limit_count, status, created_at) "
-            "VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
+            "applicable_time, stock, limit_count, images, status, created_at) "
+            "VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
             {std::to_string(merchantId), jsonStr(s, "name"),
              std::to_string(s.value("price", 0.0)), jsonStr(s, "price_unit"),
              jsonStr(s, "applicable_time"), std::to_string(s.value("stock", -1)),
-             std::to_string(s.value("limit_count", 0)), jsonStr(s, "status", "on"),
-             timeutil::nowStr()});
+             std::to_string(s.value("limit_count", 0)), jsonArrayToCsv(s, "images"),
+             jsonStr(s, "status", "on"), timeutil::nowStr()});
     } else {
         row = db.queryOne(
             "INSERT INTO services (merchant_id, store_id, name, price, price_unit, "
-            "applicable_time, stock, limit_count, status, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
+            "applicable_time, stock, limit_count, images, status, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
             {std::to_string(merchantId), storeId, jsonStr(s, "name"),
              std::to_string(s.value("price", 0.0)), jsonStr(s, "price_unit"),
              jsonStr(s, "applicable_time"), std::to_string(s.value("stock", -1)),
-             std::to_string(s.value("limit_count", 0)), jsonStr(s, "status", "on"),
-             timeutil::nowStr()});
+             std::to_string(s.value("limit_count", 0)), jsonArrayToCsv(s, "images"),
+             jsonStr(s, "status", "on"), timeutil::nowStr()});
     }
     long long id = row.is_null() ? 0 : row.value("id", 0LL);
     // 新服务默认上架到该商户所有门店（可在「门店管理」按门店下架）
@@ -221,19 +222,19 @@ void updateService(long long id, const nlohmann::json& s) {
     if (storeId.empty()) {
         db.execute(
             "UPDATE services SET store_id = NULL, name = ?, price = ?, price_unit = ?, "
-            "applicable_time = ?, stock = ?, limit_count = ?, status = ? WHERE id = ?",
+            "applicable_time = ?, stock = ?, limit_count = ?, images = ?, status = ? WHERE id = ?",
             {jsonStr(s, "name"), std::to_string(s.value("price", 0.0)),
              jsonStr(s, "price_unit"), jsonStr(s, "applicable_time"),
              std::to_string(s.value("stock", -1)), std::to_string(s.value("limit_count", 0)),
-             jsonStr(s, "status", "on"), std::to_string(id)});
+             jsonArrayToCsv(s, "images"), jsonStr(s, "status", "on"), std::to_string(id)});
     } else {
         db.execute(
             "UPDATE services SET store_id = ?, name = ?, price = ?, price_unit = ?, "
-            "applicable_time = ?, stock = ?, limit_count = ?, status = ? WHERE id = ?",
+            "applicable_time = ?, stock = ?, limit_count = ?, images = ?, status = ? WHERE id = ?",
             {storeId, jsonStr(s, "name"), std::to_string(s.value("price", 0.0)),
              jsonStr(s, "price_unit"), jsonStr(s, "applicable_time"),
              std::to_string(s.value("stock", -1)), std::to_string(s.value("limit_count", 0)),
-             jsonStr(s, "status", "on"), std::to_string(id)});
+             jsonArrayToCsv(s, "images"), jsonStr(s, "status", "on"), std::to_string(id)});
     }
 }
 
@@ -264,11 +265,11 @@ nlohmann::json listPackages(long long merchantId, const std::string& status) {
 long long addPackage(long long merchantId, const nlohmann::json& p) {
     auto row = Database::instance().queryOne(
         "INSERT INTO packages (merchant_id, name, content, price, valid_days, limit_count, "
-        "status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
+        "images, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
         {std::to_string(merchantId), jsonStr(p, "name"), jsonStr(p, "content"),
          std::to_string(p.value("price", 0.0)), std::to_string(p.value("valid_days", 30)),
-         std::to_string(p.value("limit_count", 0)), jsonStr(p, "status", "on"),
-         timeutil::nowStr()});
+         std::to_string(p.value("limit_count", 0)), jsonArrayToCsv(p, "images"),
+         jsonStr(p, "status", "on"), timeutil::nowStr()});
     long long id = row.is_null() ? 0 : row.value("id", 0LL);
     // 新套餐默认上架到该商户所有门店（可在「门店管理」按门店下架）
     if (id > 0) fanoutItemToStores(merchantId, "package", id);
@@ -278,10 +279,10 @@ long long addPackage(long long merchantId, const nlohmann::json& p) {
 void updatePackage(long long id, const nlohmann::json& p) {
     Database::instance().execute(
         "UPDATE packages SET name = ?, content = ?, price = ?, valid_days = ?, limit_count = ?, "
-        "status = ? WHERE id = ?",
+        "images = ?, status = ? WHERE id = ?",
         {jsonStr(p, "name"), jsonStr(p, "content"), std::to_string(p.value("price", 0.0)),
          std::to_string(p.value("valid_days", 30)), std::to_string(p.value("limit_count", 0)),
-         jsonStr(p, "status", "on"), std::to_string(id)});
+         jsonArrayToCsv(p, "images"), jsonStr(p, "status", "on"), std::to_string(id)});
 }
 
 bool updatePackageStatus(long long id, const std::string& status) {
@@ -392,14 +393,14 @@ nlohmann::json storeOfferings(long long storeId, long long merchantId) {
     const std::string sid = std::to_string(storeId);
     return {
         {"services",
-         db.query("SELECT s.id, s.name, s.price, s.status AS item_status, "
+         db.query("SELECT s.id, s.name, s.price, s.images, s.status AS item_status, "
                   "IFNULL(ss.status, 'off') AS store_status "
                   "FROM services s LEFT JOIN store_services ss "
                   "ON ss.service_id = s.id AND ss.store_id = ? "
                   "WHERE s.merchant_id = ? ORDER BY s.id DESC",
                   {sid, std::to_string(merchantId)})},
         {"packages",
-         db.query("SELECT p.id, p.name, p.price, p.status AS item_status, "
+         db.query("SELECT p.id, p.name, p.price, p.images, p.status AS item_status, "
                   "IFNULL(sp.status, 'off') AS store_status "
                   "FROM packages p LEFT JOIN store_packages sp "
                   "ON sp.package_id = p.id AND sp.store_id = ? "
@@ -417,15 +418,15 @@ nlohmann::json storeOfferings(long long storeId, long long merchantId) {
 nlohmann::json listStoreServices(long long storeId) {
     return Database::instance().query(
         "SELECT s.id, s.name, s.price, s.price_unit, s.applicable_time, s.stock, s.limit_count, "
-        "s.merchant_id FROM store_services ss JOIN services s ON s.id = ss.service_id "
+        "s.images, s.merchant_id FROM store_services ss JOIN services s ON s.id = ss.service_id "
         "WHERE ss.store_id = ? AND ss.status = 'on' AND s.status = 'on' ORDER BY s.id DESC",
         {std::to_string(storeId)});
 }
 
 nlohmann::json listStorePackages(long long storeId) {
     return Database::instance().query(
-        "SELECT p.id, p.name, p.content, p.price, p.valid_days, p.limit_count, p.merchant_id "
-        "FROM store_packages sp JOIN packages p ON p.id = sp.package_id "
+        "SELECT p.id, p.name, p.content, p.price, p.valid_days, p.limit_count, p.images, "
+        "p.merchant_id FROM store_packages sp JOIN packages p ON p.id = sp.package_id "
         "WHERE sp.store_id = ? AND sp.status = 'on' AND p.status = 'on' ORDER BY p.id DESC",
         {std::to_string(storeId)});
 }

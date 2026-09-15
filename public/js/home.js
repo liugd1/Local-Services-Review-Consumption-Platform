@@ -203,7 +203,7 @@ LL.views.merchant = async function (el, id) {
 
   const user = LL.user;
   const isOwner = !!(user && Number(user.id) === Number(m.user_id));
-  const images = m.images ? String(m.images).split(",").filter(x => x) : [];
+  const images = LL.imgList(m.images);
   const photo = images[0];
   const star = Number(m.avg_score) || 0;
   const statusDesc = { pending: "入驻审核中", approved: "营业中", rejected: "申请被驳回" };
@@ -238,8 +238,19 @@ LL.views.merchant = async function (el, id) {
       : '<div class="cover-photo" style="' + LL.cover(m.category_id) + '"><span>' + LL.emoji(m.category_id) + "</span></div>"}
   </section>`;
 
+  // 店铺相册（掌柜上传的多张图片）
+  const galleryHtml = images.length
+    ? '<div class="container-xl mt-2"><div class="panel"><h5><i class="bi bi-images"></i> 店铺相册（' + images.length + '）</h5>' +
+      LL.imgThumbs(images.join(","), 96) + "</div></div>"
+    : "";
+
   const stores = (m.stores || []).map(s =>
-    '<div class="info-cell"><b><span class="badge-soft badge-' + LL.statusClass(s.status).replace("badge-", "") + '">' + LL.statusZh(s.status) + '</span> ' + LL.esc(s.name) +
+    '<div class="info-cell">' +
+    (LL.imgList(s.images).length
+      ? '<img src="' + LL.esc(LL.imgList(s.images)[0]) + '" data-view-src="' + LL.esc(LL.imgList(s.images)[0]) +
+        '" style="width:100%;height:76px;object-fit:cover;border-radius:10px;border:1px solid var(--line);margin-bottom:6px;cursor:zoom-in">'
+      : "") +
+    '<b><span class="badge-soft badge-' + LL.statusClass(s.status).replace("badge-", "") + '">' + LL.statusZh(s.status) + '</span> ' + LL.esc(s.name) +
     '</b><span>' + LL.esc(s.address || "—") + '</span>' +
     '<a class="small fw-bold" style="color:var(--green);text-decoration:none" href="#/talk/store/' + s.id + '">门店口碑 ›</a></div>').join("");
   const infoRow = `<div class="panel">
@@ -265,7 +276,11 @@ LL.views.merchant = async function (el, id) {
     ? '<div class="panel" style="margin-top:1.1rem"><h5><i class="bi bi-list-check"></i> 招牌服务</h5>' +
       svcs.map(s => {
         const stores = storesOfItem(svcStores, s.id);
-        return '<div class="good-row"><div class="good-name"><b>' + LL.esc(s.name) + "</b><small>" +
+        const pic = LL.imgList(s.images)[0];
+        return '<div class="good-row">' +
+          (pic ? '<img src="' + LL.esc(pic) + '" data-view-src="' + LL.esc(pic) + '" ' +
+            'style="width:52px;height:52px;object-fit:cover;border-radius:10px;border:1px solid var(--line);margin-right:10px;cursor:zoom-in">' : "") +
+          '<div class="good-name"><b>' + LL.esc(s.name) + "</b><small>" +
           LL.esc(s.applicable_time || "适用时段不限") +
           (Number(s.stock) >= 0 ? " · 余量 " + s.stock : "") +
           (stores.length ? " · " + stores.length + " 家门店在售" : "") + "</small></div>" +
@@ -284,7 +299,11 @@ LL.views.merchant = async function (el, id) {
     ? '<div class="panel" style="margin-top:1.1rem"><h5><i class="bi bi-gift"></i> 优惠套餐</h5>' +
       pkgs.map(p => {
         const stores = storesOfItem(pkgStores, p.id);
-        return '<div class="good-row"><div class="good-name"><b>' + LL.esc(p.name) + "</b><small>" +
+        const pic = LL.imgList(p.images)[0];
+        return '<div class="good-row">' +
+          (pic ? '<img src="' + LL.esc(pic) + '" data-view-src="' + LL.esc(pic) + '" ' +
+            'style="width:52px;height:52px;object-fit:cover;border-radius:10px;border:1px solid var(--line);margin-right:10px;cursor:zoom-in">' : "") +
+          '<div class="good-name"><b>' + LL.esc(p.name) + "</b><small>" +
           LL.esc(p.content || "") + (p.valid_days ? " · 有效期 " + p.valid_days + " 天" : "") +
           (stores.length ? " · " + stores.length + " 家门店在售" : "") + "</small></div>" +
           '<span class="good-price">' + LL.money(p.price) + '</span>' +
@@ -341,6 +360,7 @@ LL.views.merchant = async function (el, id) {
   }
 
   el.innerHTML = '<div class="container-xl">' + hero + "</div>" +
+    galleryHtml +
     '<div class="container-xl">' +
     '<div class="row g-3 mt-2"><div class="col-lg-7">' + infoRow + storeHtml + svcHtml + pkgHtml + "</div>" +
     '<div class="col-lg-5">' + form +

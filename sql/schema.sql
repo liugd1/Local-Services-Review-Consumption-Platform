@@ -77,6 +77,7 @@ CREATE TABLE IF NOT EXISTS stores (
   name        TEXT    NOT NULL,
   address     TEXT    DEFAULT '',
   area        TEXT    DEFAULT '',
+  images      TEXT    DEFAULT '',   -- 门店图片（多个用英文逗号分隔）
   status      TEXT    NOT NULL DEFAULT 'open'
               CHECK (status IN ('open', 'rest', 'closed')),
   created_at  TEXT    NOT NULL
@@ -93,6 +94,7 @@ CREATE TABLE IF NOT EXISTS services (
   applicable_time TEXT    DEFAULT '',
   stock           INTEGER DEFAULT -1,   -- -1 表示不限量
   limit_count     INTEGER DEFAULT 0,    -- 每人限购数量，0 表示不限
+  images          TEXT    DEFAULT '',   -- 服务项目图片（多个用英文逗号分隔）
   status          TEXT    NOT NULL DEFAULT 'on'
                   CHECK (status IN ('on', 'off')),
   created_at      TEXT    NOT NULL
@@ -108,6 +110,7 @@ CREATE TABLE IF NOT EXISTS packages (
   price       REAL    NOT NULL DEFAULT 0,
   valid_days  INTEGER DEFAULT 30,
   limit_count INTEGER DEFAULT 0,
+  images      TEXT    DEFAULT '',   -- 套餐图片（多个用英文逗号分隔）
   status      TEXT    NOT NULL DEFAULT 'on'
               CHECK (status IN ('on', 'off')),
   created_at  TEXT    NOT NULL

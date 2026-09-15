@@ -69,25 +69,31 @@ async function shopOverview(main, data) {
     '<div class="col-md-3"><label class="form-label">人均下限</label><input class="form-control" name="price_min" type="number" value="' + (m.price_min || 0) + '"></div>' +
     '<div class="col-md-3"><label class="form-label">人均上限</label><input class="form-control" name="price_max" type="number" value="' + (m.price_max || 0) + '"></div>' +
     '<div class="col-md-6"><label class="form-label">一句话介绍</label><input class="form-control" name="intro" value="' + LL.esc(m.intro || "") + '"></div>' +
+    '<div class="col-12"><label class="form-label">店铺图片（可多张，用于店铺主页封面与相册）</label><div id="mImages"></div></div>' +
     '<div class="col-12 d-flex gap-2">' +
     (m.status === "rejected" ? '<button class="btn btn-fire" type="submit" name="reapply">保存并重新提交审核</button>' : '<button class="btn btn-main" type="submit">保存资料</button>') +
     "</div></form></div>";
 
   const f = main.querySelector("#shopInfoForm");
+  const mImages = LL.imagePicker(main.querySelector("#mImages"),
+    { max: 8, urls: LL.imgList(m.images), hint: "第一张作为店铺主页封面图" });
   f.addEventListener("submit", async e => {
     e.preventDefault();
     const b = e.submitter;
+    const images = mImages.getUrls();
     try {
       await LL.api("PUT", "/api/merchant/me", {
         name: f.name.value.trim(), category_id: f.category_id.value, area: f.area.value.trim(),
         business_hours: f.business_hours.value.trim(), phone: f.phone.value.trim(),
-        price_min: Number(f.price_min.value), price_max: Number(f.price_max.value), intro: f.intro.value.trim()
+        price_min: Number(f.price_min.value), price_max: Number(f.price_max.value),
+        intro: f.intro.value.trim(), images: images
       });
       if (b && b.name === "reapply") {
         await LL.api("POST", "/api/merchant/apply", {
           name: f.name.value.trim(), category_id: f.category_id.value, area: f.area.value.trim(),
           business_hours: f.business_hours.value.trim(), phone: f.phone.value.trim(),
-          price_min: Number(f.price_min.value), price_max: Number(f.price_max.value), intro: f.intro.value.trim()
+          price_min: Number(f.price_min.value), price_max: Number(f.price_max.value),
+          intro: f.intro.value.trim(), images: images
         });
       }
       LL.toast(b && b.name === "reapply" ? "已重新提交审核" : "资料已保存", "ok");
@@ -103,7 +109,9 @@ async function shopStores(main, data) {
   main.innerHTML = '<div class="table-card"><div class="t-head"><h5>门店管理</h5>' +
     '<button class="btn btn-main btn-sm" onclick="LL.openStoreForm()"><i class="bi bi-plus-lg"></i> 新增门店</button></div>' +
     '<table class="table"><thead><tr><th>门店</th><th>地址</th><th>区域</th><th>状态</th><th style="width:330px">操作</th></tr></thead><tbody>' +
-    (rows.map(s => "<tr><td><b>" + LL.esc(s.name) + "</b></td><td>" + LL.esc(s.address || "—") + "</td><td>" + LL.esc(s.area || "—") +
+    (rows.map(s => '<tr><td><b>' + LL.esc(s.name) + "</b>" +
+      (LL.imgThumbs(s.images, 42) ? '<div class="mt-1">' + LL.imgThumbs(s.images, 42) + "</div>" : "") +
+      "</td><td>" + LL.esc(s.address || "—") + "</td><td>" + LL.esc(s.area || "—") +
       "</td><td>" + badge(s.status) + '</td><td><div class="btn-group btn-group-sm">' +
       '<button class="btn btn-main" data-offer="' + s.id + '" data-name="' + LL.esc(s.name) + '">经营项目</button>' +
       '<button class="btn btn-ghost" data-edit="' + s.id + '">编辑</button>' +
@@ -118,16 +126,19 @@ async function shopStores(main, data) {
     '<option value="open">营业中</option><option value="rest">休息中</option><option value="closed">已打烊</option></select></div>' +
     '<div class="col-md-6"><label class="form-label">地址</label><input class="form-control" name="address"></div>' +
     '<div class="col-md-6"><label class="form-label">区域</label><input class="form-control" name="area"></div>' +
+    '<div class="col-12"><label class="form-label">门店图片（可多张）</label><div id="storeImages"></div></div>' +
     '<div class="col-12"><button class="btn btn-main" type="submit">保存</button> <button type="button" class="btn btn-ghost" id="storeCancel">取消</button></div>' +
     "</form></div>";
 
   const box = main.querySelector("#storeFormBox");
+  const stImages = LL.imagePicker(main.querySelector("#storeImages"), { max: 6, urls: [] });
   const open = s => {
     box.style.display = "";
     const form = main.querySelector("#storeForm");
     form.reset();
     form.id.value = s ? s.id : "";
     if (s) { form.name.value = s.name; form.address.value = s.address || ""; form.area.value = s.area || ""; form.status.value = s.status || "open"; }
+    stImages.setUrls(s ? LL.imgList(s.images) : []);
     main.querySelector("#storeFormTitle").textContent = s ? "编辑门店" : "新增门店";
   };
   LL.openStoreForm = () => open(null);
@@ -140,7 +151,8 @@ async function shopStores(main, data) {
   }));
   main.querySelector("#storeForm").addEventListener("submit", async e => {
     e.preventDefault(); const f = e.target;
-    const body = { name: f.name.value.trim(), address: f.address.value.trim(), area: f.area.value.trim(), status: f.status.value };
+    const body = { name: f.name.value.trim(), address: f.address.value.trim(), area: f.area.value.trim(),
+      status: f.status.value, images: stImages.getUrls() };
     try {
       if (f.id.value) await LL.api("PUT", "/api/merchant/stores/" + f.id.value, body);
       else await LL.api("POST", "/api/merchant/stores", body);
@@ -186,9 +198,14 @@ async function shopStores(main, data) {
                               it.item_status === "offline";
               const price = (it.price !== undefined && g.unit) ? ' <span class="text-muted small">' + g.unit + LL.money(it.price) + "</span>" : "";
               return '<div class="d-flex align-items-center justify-content-between border-top py-2">' +
+                '<div class="d-flex align-items-center gap-2">' +
+                (LL.imgList(it.images).length
+                  ? '<img src="' + LL.esc(LL.imgList(it.images)[0]) + '" data-view-src="' + LL.esc(LL.imgList(it.images)[0]) +
+                    '" style="width:38px;height:38px;object-fit:cover;border-radius:8px;border:1px solid var(--line);cursor:zoom-in">'
+                  : "") +
                 '<div><b>' + LL.esc(it.name) + "</b>" + price +
                 (itemOff ? ' <span class="badge-soft badge-rest">项目已下架</span>'
-                         : (it.item_status === "published" ? ' <span class="badge-soft badge-approved">活动进行中</span>' : "")) + "</div>" +
+                         : (it.item_status === "published" ? ' <span class="badge-soft badge-approved">活动进行中</span>' : "")) + "</div></div>" +
                 '<button class="btn btn-sm ' + (on ? "btn-main" : "btn-ghost") + '" data-item="' + g.type + ":" + it.id +
                 '" data-status="' + (on ? "off" : "on") + '"' + (itemOff ? " disabled" : "") + ">" +
                 (on ? "已上架 · 点击下架" : "未上架 · 点击上架") + "</button></div>";
@@ -239,7 +256,9 @@ async function shopServices(main, data) {
     '<div class="table-card"><div class="t-head"><h5>服务项目</h5>' +
     '<button class="btn btn-main btn-sm" id="svcAdd"><i class="bi bi-plus-lg"></i> 新增服务</button></div>' +
     '<table class="table"><thead><tr><th>服务</th><th>价格</th><th>时段/门店</th><th>状态</th><th style="width:230px">操作</th></tr></thead><tbody>' +
-    (rows.map(s => "<tr><td><b>" + LL.esc(s.name) + "</b></td><td class='price-min'>" + LL.money(s.price) +
+    (rows.map(s => '<tr><td><b>' + LL.esc(s.name) + "</b>" +
+      (LL.imgThumbs(s.images, 42) ? '<div class="mt-1">' + LL.imgThumbs(s.images, 42) + "</div>" : "") +
+      "</td><td class='price-min'>" + LL.money(s.price) +
       "</td><td class='text-muted' style='font-size:12px'>" + LL.esc(s.applicable_time || "不限") + (s.store_name ? " · " + LL.esc(s.store_name) : "") + "</td><td>" + badge(s.status) +
       '</td><td><div class="btn-group btn-group-sm">' +
       '<button class="btn btn-ghost" data-edit="' + s.id + '">编辑</button>' +
@@ -254,9 +273,11 @@ async function shopServices(main, data) {
     '<div class="col-md-6"><label class="form-label">适用时间</label><input class="form-control" name="applicable_time" placeholder="如：工作日 14:00-17:00"></div>' +
     '<div class="col-md-3"><label class="form-label">库存（-1 不限）</label><input class="form-control" name="stock" type="number" value="-1"></div>' +
     '<div class="col-md-3"><label class="form-label">每人限购</label><input class="form-control" name="limit_count" type="number" value="0"></div>' +
+    '<div class="col-12"><label class="form-label">服务图片（可多张）</label><div id="svcImages"></div></div>' +
     '<div class="col-12"><button class="btn btn-main" type="submit">保存</button> <button type="button" class="btn btn-ghost" id="svcCancel">取消</button></div></form></div>';
 
   const box = main.querySelector("#svcFormBox");
+  const svcImages = LL.imagePicker(main.querySelector("#svcImages"), { max: 6, urls: [] });
   const open = s => {
     box.style.display = "";
     const form = main.querySelector("#svcForm");
@@ -266,6 +287,7 @@ async function shopServices(main, data) {
       form.name.value = s.name; form.price.value = s.price; form.price_unit.value = s.price_unit || "";
       form.applicable_time.value = s.applicable_time || ""; form.stock.value = s.stock; form.limit_count.value = s.limit_count || 0;
     }
+    svcImages.setUrls(s ? LL.imgList(s.images) : []);
     main.querySelector("#svcFormTitle").textContent = s ? "编辑服务" : "新增服务";
   };
   main.querySelector("#svcAdd").addEventListener("click", () => open(null));
@@ -280,7 +302,8 @@ async function shopServices(main, data) {
   main.querySelector("#svcForm").addEventListener("submit", async e => {
     e.preventDefault(); const f = e.target;
     const body = { name: f.name.value.trim(), price: Number(f.price.value), price_unit: f.price_unit.value.trim(),
-      applicable_time: f.applicable_time.value.trim(), stock: Number(f.stock.value), limit_count: Number(f.limit_count.value) };
+      applicable_time: f.applicable_time.value.trim(), stock: Number(f.stock.value),
+      limit_count: Number(f.limit_count.value), images: svcImages.getUrls() };
     try {
       if (f.id.value) await LL.api("PUT", "/api/merchant/services/" + f.id.value, body);
       else await LL.api("POST", "/api/merchant/services", body);
@@ -298,7 +321,9 @@ async function shopPackages(main, data) {
     '<div class="table-card"><div class="t-head"><h5>优惠套餐</h5>' +
     '<button class="btn btn-main btn-sm" id="pkgAdd"><i class="bi bi-plus-lg"></i> 新增套餐</button></div>' +
     '<table class="table"><thead><tr><th>套餐</th><th>内容</th><th>价格</th><th>状态</th><th style="width:230px">操作</th></tr></thead><tbody>' +
-    (rows.map(p => "<tr><td><b>" + LL.esc(p.name) + "</b></td><td class='text-muted' style='font-size:12px'>" + LL.esc((p.content || "").slice(0, 30)) +
+    (rows.map(p => '<tr><td><b>' + LL.esc(p.name) + "</b>" +
+      (LL.imgThumbs(p.images, 42) ? '<div class="mt-1">' + LL.imgThumbs(p.images, 42) + "</div>" : "") +
+      "</td><td class='text-muted' style='font-size:12px'>" + LL.esc((p.content || "").slice(0, 30)) +
       "</td><td class='price-min'>" + LL.money(p.price) + "</td><td>" + badge(p.status) +
       '</td><td><div class="btn-group btn-group-sm">' +
       '<button class="btn btn-ghost" data-edit="' + p.id + '">编辑</button>' +
@@ -311,15 +336,18 @@ async function shopPackages(main, data) {
     '<div class="col-md-3"><label class="form-label">价格（元）</label><input class="form-control" name="price" type="number" step="0.01" min="0"></div>' +
     '<div class="col-md-3"><label class="form-label">有效期（天）</label><input class="form-control" name="valid_days" type="number" value="30"></div>' +
     '<div class="col-12"><label class="form-label">套餐内容</label><textarea class="form-control" name="content" rows="2"></textarea></div>' +
+    '<div class="col-12"><label class="form-label">套餐图片（可多张）</label><div id="pkgImages"></div></div>' +
     '<div class="col-12"><button class="btn btn-main" type="submit">保存</button> <button type="button" class="btn btn-ghost" id="pkgCancel">取消</button></div></form></div>';
 
   const box = main.querySelector("#pkgFormBox");
+  const pkgImages = LL.imagePicker(main.querySelector("#pkgImages"), { max: 6, urls: [] });
   const open = p => {
     box.style.display = "";
     const form = main.querySelector("#pkgForm");
     form.reset();
     form.id.value = p ? p.id : "";
     if (p) { form.name.value = p.name; form.price.value = p.price; form.valid_days.value = p.valid_days; form.content.value = p.content || ""; }
+    pkgImages.setUrls(p ? LL.imgList(p.images) : []);
     main.querySelector("#pkgFormTitle").textContent = p ? "编辑套餐" : "新增套餐";
   };
   main.querySelector("#pkgAdd").addEventListener("click", () => open(null));
@@ -333,7 +361,8 @@ async function shopPackages(main, data) {
   }));
   main.querySelector("#pkgForm").addEventListener("submit", async e => {
     e.preventDefault(); const f = e.target;
-    const body = { name: f.name.value.trim(), price: Number(f.price.value), valid_days: Number(f.valid_days.value), content: f.content.value.trim() };
+    const body = { name: f.name.value.trim(), price: Number(f.price.value), valid_days: Number(f.valid_days.value),
+      content: f.content.value.trim(), images: pkgImages.getUrls() };
     try {
       if (f.id.value) await LL.api("PUT", "/api/merchant/packages/" + f.id.value, body);
       else await LL.api("POST", "/api/merchant/packages", body);

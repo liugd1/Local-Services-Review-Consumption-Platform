@@ -69,7 +69,15 @@ inline bool run() {
     db.execute("CREATE INDEX IF NOT EXISTS idx_consumption_merchant ON consumption_records (merchant_id)");
     db.execute("CREATE INDEX IF NOT EXISTS idx_consumption_store ON consumption_records (store_id)");
 
-    // 5) 门店经营项目上架关系回填：存量门店 × 服务/套餐/活动 默认「上架」，
+    // 5) 门店 / 服务项目 / 优惠套餐：补充图片列（多图以英文逗号分隔）
+    if (!hasColumn("stores", "images"))
+        db.execute("ALTER TABLE stores ADD COLUMN images TEXT DEFAULT ''");
+    if (!hasColumn("services", "images"))
+        db.execute("ALTER TABLE services ADD COLUMN images TEXT DEFAULT ''");
+    if (!hasColumn("packages", "images"))
+        db.execute("ALTER TABLE packages ADD COLUMN images TEXT DEFAULT ''");
+
+    // 6) 门店经营项目上架关系回填：存量门店 × 服务/套餐/活动 默认「上架」，
     //    保证升级后原有店铺仍可在门店页下单
     const std::string now = timeutil::nowStr();
     db.execute(
