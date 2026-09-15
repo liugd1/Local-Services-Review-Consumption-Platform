@@ -254,40 +254,44 @@ LL.views.merchant = async function (el, id) {
   const canBuy = !!(user && user.role === "consumer" && !isOwner);
   const svcs = m.services || [];
   const svcStores = m.service_stores || {};
-  const firstStoreOf = (map, id) => {
-    const arr = map[String(id)] || [];
-    return arr.length ? arr[0] : 0;
-  };
+  const pkgStores = m.package_stores || {};
+  // 门店 id → 门店对象（用于「选择门店」弹窗展示名称/区域/营业状态）
+  const storeById = {};
+  (m.stores || []).forEach(st => { storeById[st.id] = st; });
+  // 某项目在售的门店列表（只列真正上架该项目的门店）
+  const storesOfItem = (map, id) =>
+    (map[String(id)] || []).map(sid => storeById[sid]).filter(Boolean);
   const svcHtml = svcs.length
     ? '<div class="panel" style="margin-top:1.1rem"><h5><i class="bi bi-list-check"></i> 招牌服务</h5>' +
       svcs.map(s => {
-        const sid = firstStoreOf(svcStores, s.id);
+        const stores = storesOfItem(svcStores, s.id);
         return '<div class="good-row"><div class="good-name"><b>' + LL.esc(s.name) + "</b><small>" +
           LL.esc(s.applicable_time || "适用时段不限") +
-          (Number(s.stock) >= 0 ? " · 余量 " + s.stock : "") + "</small></div>" +
+          (Number(s.stock) >= 0 ? " · 余量 " + s.stock : "") +
+          (stores.length ? " · " + stores.length + " 家门店在售" : "") + "</small></div>" +
           '<span class="good-price">' + LL.money(s.price) + '</span>' +
           '<a class="btn btn-ghost btn-sm ms-2" href="#/talk/service/' + s.id + '">口碑评价 ›</a>' +
-          (sid
-            ? '<a class="btn btn-fire btn-sm ms-1" href="#/s/' + sid + '">' +
-              (canBuy ? "选择门店下单" : "进店选购") + "</a>"
+          (stores.length
+            ? '<button class="btn btn-fire btn-sm ms-1" data-pick="service:' + s.id + '">' +
+              (canBuy ? "选择门店下单" : "选择门店") + "</button>"
             : '<span class="text-muted small ms-2">暂未在门店上架</span>') +
           "</div>";
       }).join("") + "</div>"
     : "";
 
   const pkgs = m.packages || [];
-  const pkgStores = m.package_stores || {};
   const pkgHtml = pkgs.length
     ? '<div class="panel" style="margin-top:1.1rem"><h5><i class="bi bi-gift"></i> 优惠套餐</h5>' +
       pkgs.map(p => {
-        const sid = firstStoreOf(pkgStores, p.id);
+        const stores = storesOfItem(pkgStores, p.id);
         return '<div class="good-row"><div class="good-name"><b>' + LL.esc(p.name) + "</b><small>" +
-          LL.esc(p.content || "") + (p.valid_days ? " · 有效期 " + p.valid_days + " 天" : "") + "</small></div>" +
+          LL.esc(p.content || "") + (p.valid_days ? " · 有效期 " + p.valid_days + " 天" : "") +
+          (stores.length ? " · " + stores.length + " 家门店在售" : "") + "</small></div>" +
           '<span class="good-price">' + LL.money(p.price) + '</span>' +
           '<a class="btn btn-ghost btn-sm ms-2" href="#/talk/package/' + p.id + '">口碑评价 ›</a>' +
-          (sid
-            ? '<a class="btn btn-fire btn-sm ms-1" href="#/s/' + sid + '">' +
-              (canBuy ? "选择门店下单" : "进店选购") + "</a>"
+          (stores.length
+            ? '<button class="btn btn-fire btn-sm ms-1" data-pick="package:' + p.id + '">' +
+              (canBuy ? "选择门店下单" : "选择门店") + "</button>"
             : '<span class="text-muted small ms-2">暂未在门店上架</span>') +
           "</div>";
       }).join("") + "</div>"
@@ -343,6 +347,70 @@ LL.views.merchant = async function (el, id) {
     '<div class="cat-chips mb-2" id="revTabs"></div>' +
     '<div id="revHead"></div><div id="revList"></div>' +
     '<div id="revMoreWrap" class="text-center"></div></div></div></div>';
+
+  // ---- 选择门店：列出「正在在售该项目」的门店，选定后再进入该门店下单 ----
+  const openStorePicker = (itemType, itemName, priceText, stores) => {
+    const old = document.getElementById("storePickerModal");
+    if (old) old.remove();
+    const statusDesc = { open: "营业中", rest: "休息中", closed: "已打烊" };
+    const modalEl = document.createElement("div");
+    modalEl.id = "storePickerModal";
+    modalEl.className = "modal fade";
+    modalEl.tabIndex = -1;
+    modalEl.innerHTML =
+      '<div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">' +
+      '<div class="modal-content"><div class="modal-header">' +
+      '<div><h5 class="modal-title" style="font-family:var(--serif)">选择门店</h5>' +
+      '<div class="text-muted" style="font-size:12.5px">' +
+      (itemType === "service" ? "招牌服务" : "优惠套餐") + "：「" + LL.esc(itemName) + "」" +
+      (priceText ? " · " + priceText : "") + "　以下 " + stores.length + " 家门店在售</div></div>" +
+      '<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button></div>' +
+      '<div class="modal-body p-2">' +
+      stores.map(st => {
+        const os = st.on_sale || {};
+        const desc = statusDesc[st.status] || st.status;
+        const closed = st.status === "closed";
+        return '<div class="d-flex align-items-center justify-content-between border rounded p-2 mb-2" style="border-color:var(--line)!important">' +
+          '<div style="min-width:0"><div class="d-flex align-items-center gap-2 flex-wrap">' +
+          '<b>' + LL.esc(st.name) + "</b>" +
+          '<span class="badge-soft badge-' + LL.statusClass(st.status).replace("badge-", "") + '">' + desc + "</span></div>" +
+          '<div class="text-muted" style="font-size:12.5px"><i class="bi bi-geo-alt"></i> ' +
+          LL.esc(st.area || "本城") + (st.address ? " · " + LL.esc(st.address) : "") + "</div>" +
+          '<div class="text-muted" style="font-size:11.5px">本店在售：服务 ' + (os.services || 0) +
+          " · 套餐 " + (os.packages || 0) + " · 活动 " + (os.coupons || 0) + "</div></div>" +
+          '<div class="text-end">' +
+          '<button class="btn btn-fire btn-sm" data-go-store="' + st.id + '"' + (closed ? " disabled" : "") + ">" +
+          (closed ? "已打烊" : (canBuy ? "选这家下单 ›" : "进入门店 ›")) + "</button>" +
+          '<div class="mt-1"><a class="text-muted" style="font-size:11.5px" href="#/talk/store/' + st.id + '" data-bs-dismiss="modal">看门店口碑</a></div>' +
+          "</div></div>";
+      }).join("") +
+      "</div>" +
+      '<div class="modal-footer"><span class="text-muted me-auto" style="font-size:12.5px">' +
+      (canBuy ? "选定门店后即可在该门店下单" : "登录消费者账号后可在门店下单") + "</span>" +
+      '<button class="btn btn-ghost btn-sm" data-bs-dismiss="modal">取消</button></div>' +
+      "</div></div>";
+    document.body.appendChild(modalEl);
+    const modal = new bootstrap.Modal(modalEl);
+    modalEl.addEventListener("click", e => {
+      const btn = e.target.closest("[data-go-store]");
+      if (!btn || btn.disabled) return;
+      modal.hide();
+      location.hash = "#/s/" + btn.dataset.goStore;   // 选定门店后才跳转到该门店
+    });
+    modalEl.addEventListener("hidden.bs.modal", () => modalEl.remove());
+    modal.show();
+  };
+
+  el.querySelectorAll("[data-pick]").forEach(b => b.addEventListener("click", () => {
+    const [type, idStr] = b.dataset.pick.split(":");
+    const itemId = Number(idStr);
+    const src = type === "service" ? svcs : pkgs;
+    const map = type === "service" ? svcStores : pkgStores;
+    const item = src.find(x => Number(x.id) === itemId) || {};
+    const stores = storesOfItem(map, itemId);
+    if (!stores.length) { LL.toast("该项目暂未在任何门店上架", "info"); return; }
+    openStorePicker(type, item.name || "", item.price !== undefined ? LL.money(item.price) : "", stores);
+  }));
 
   // 收藏 / 关注状态与操作（消费者）
   if (user && user.role === "consumer" && !isOwner) {
