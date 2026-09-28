@@ -323,7 +323,9 @@ async function shopPackages(main, data) {
     '<table class="table"><thead><tr><th>套餐</th><th>内容</th><th>价格</th><th>状态</th><th style="width:230px">操作</th></tr></thead><tbody>' +
     (rows.map(p => '<tr><td><b>' + LL.esc(p.name) + "</b>" +
       (LL.imgThumbs(p.images, 42) ? '<div class="mt-1">' + LL.imgThumbs(p.images, 42) + "</div>" : "") +
+      (p.items_text ? '<div class="text-muted" style="font-size:12px">含：' + LL.esc(p.items_text) + "</div>" : '<div class="text-muted" style="font-size:12px">未绑定服务项目</div>') +
       "</td><td class='text-muted' style='font-size:12px'>" + LL.esc((p.content || "").slice(0, 30)) +
+      (Number(p.origin_price) > 0 ? '<div class="text-muted" style="font-size:11.5px">原价 ¥' + LL.money(p.origin_price) + "</div>" : "") +
       "</td><td class='price-min'>" + LL.money(p.price) + "</td><td>" + badge(p.status) +
       '</td><td><div class="btn-group btn-group-sm">' +
       '<button class="btn btn-ghost" data-edit="' + p.id + '">编辑</button>' +
@@ -336,11 +338,43 @@ async function shopPackages(main, data) {
     '<div class="col-md-3"><label class="form-label">价格（元）</label><input class="form-control" name="price" type="number" step="0.01" min="0"></div>' +
     '<div class="col-md-3"><label class="form-label">有效期（天）</label><input class="form-control" name="valid_days" type="number" value="30"></div>' +
     '<div class="col-12"><label class="form-label">套餐内容</label><textarea class="form-control" name="content" rows="2"></textarea></div>' +
+    '<div class="col-12"><label class="form-label">包含的服务项目 *（可设置数量，0 表示不包含）</label>' +
+    '<div id="pkgItems" class="border rounded p-2"></div>' +
+    '<div class="text-muted mt-1" style="font-size:12.5px">服务项目原价合计：<b id="pkgOrigin">¥0</b>；上面的套餐售价可低于原价（相当于折扣）</div></div>' +
     '<div class="col-12"><label class="form-label">套餐图片（可多张）</label><div id="pkgImages"></div></div>' +
     '<div class="col-12"><button class="btn btn-main" type="submit">保存</button> <button type="button" class="btn btn-ghost" id="pkgCancel">取消</button></div></form></div>';
 
   const box = main.querySelector("#pkgFormBox");
   const pkgImages = LL.imagePicker(main.querySelector("#pkgImages"), { max: 6, urls: [] });
+  // 套餐 = 多个服务项目组合（数量可调），实时计算原价合计
+  const svcAll = data.services || [];
+  const itemsBox = main.querySelector("#pkgItems");
+  const collectItems = () => [...itemsBox.querySelectorAll("[data-svc]")]
+    .map(i => ({ service_id: Number(i.dataset.svc), quantity: Number(i.value) || 0 }))
+    .filter(x => x.quantity > 0);
+  const renderItems = (sel) => {
+    const map = {};
+    (sel || []).forEach(x => { map[x.service_id] = x.quantity; });
+    itemsBox.innerHTML = svcAll.length
+      ? svcAll.map(s => '<div class="d-flex align-items-center justify-content-between border-bottom py-1">' +
+          '<div><b>' + LL.esc(s.name) + '</b> <span class="text-muted" style="font-size:12px">¥' + LL.money(s.price) +
+          (s.price_unit ? " / " + LL.esc(s.price_unit) : "") + (s.status === "off" ? "（该服务已下架）" : "") + "</span></div>" +
+          '<div class="d-flex align-items-center gap-2"><span class="text-muted" style="font-size:12px">数量</span>' +
+          '<input type="number" min="0" class="form-control form-control-sm" style="width:84px" data-svc="' + s.id +
+          '" value="' + (map[s.id] || 0) + '"></div></div>').join("")
+      : '<div class="text-muted small">还没有服务项目，请先到「服务项目」页签创建</div>';
+    itemsBox.querySelectorAll("[data-svc]").forEach(i => i.addEventListener("input", updateOrigin));
+    updateOrigin();
+  };
+  const updateOrigin = () => {
+    let sum = 0;
+    collectItems().forEach(x => {
+      const s = svcAll.find(v => Number(v.id) === x.service_id);
+      if (s) sum += Number(s.price) * x.quantity;
+    });
+    const el = main.querySelector("#pkgOrigin");
+    if (el) el.textContent = "¥" + LL.money(sum);
+  };
   const open = p => {
     box.style.display = "";
     const form = main.querySelector("#pkgForm");
@@ -348,6 +382,7 @@ async function shopPackages(main, data) {
     form.id.value = p ? p.id : "";
     if (p) { form.name.value = p.name; form.price.value = p.price; form.valid_days.value = p.valid_days; form.content.value = p.content || ""; }
     pkgImages.setUrls(p ? LL.imgList(p.images) : []);
+    renderItems(p ? (p.items || []).map(i => ({ service_id: i.service_id, quantity: i.quantity })) : []);
     main.querySelector("#pkgFormTitle").textContent = p ? "编辑套餐" : "新增套餐";
   };
   main.querySelector("#pkgAdd").addEventListener("click", () => open(null));
@@ -361,8 +396,10 @@ async function shopPackages(main, data) {
   }));
   main.querySelector("#pkgForm").addEventListener("submit", async e => {
     e.preventDefault(); const f = e.target;
+    const items = collectItems();
+    if (!items.length) { LL.toast("请至少绑定 1 个服务项目并设置数量", "err"); return; }
     const body = { name: f.name.value.trim(), price: Number(f.price.value), valid_days: Number(f.valid_days.value),
-      content: f.content.value.trim(), images: pkgImages.getUrls() };
+      content: f.content.value.trim(), images: pkgImages.getUrls(), items: items };
     try {
       if (f.id.value) await LL.api("PUT", "/api/merchant/packages/" + f.id.value, body);
       else await LL.api("POST", "/api/merchant/packages", body);
@@ -552,6 +589,8 @@ async function shopCoupons(main, data) {
     '<div class="col-md-4"><label class="form-label">折扣率(选折扣时)</label><input class="form-control" name="discount_rate" type="number" step="0.01" min="0" max="1" value="0.9"></div>' +
     '<div class="col-md-6"><label class="form-label">有效期至</label><input class="form-control" name="end_time" type="datetime-local" required></div>' +
     '<div class="col-md-4"><label class="form-label">使用范围</label><input class="form-control" name="scope" placeholder="全场通用"></div>' +
+    '<div class="col-12"><label class="form-label">适用对象（勾选后仅可在所选服务项目/优惠套餐中使用；不勾选 = 全场通用）</label>' +
+    '<div id="cpnTargets" class="border rounded p-2"></div></div>' +
     '<div class="col-12"><button class="btn btn-main" type="submit" name="save">创建草稿</button>' +
     '<button class="btn btn-fire ms-2" type="submit" name="pub">创建并立即发布</button></div></form></div>' +
     '<div class="table-card"><div class="t-head"><h5>我的活动</h5></div><div class="p-3" id="cpnList">加载中…</div></div>' +
@@ -560,6 +599,20 @@ async function shopCoupons(main, data) {
     '<button class="btn btn-fire">核销</button></form></div>';
 
   const listEl = main.querySelector("#cpnList");
+  // 适用对象多选（服务项目 / 优惠套餐）
+  const targetsBox = main.querySelector("#cpnTargets");
+  const collectTargets = () => [...targetsBox.querySelectorAll("[data-target]:checked")]
+    .map(i => { const [t, id] = i.dataset.target.split(":"); return { target_type: t, target_id: Number(id) }; });
+  const renderTargets = () => {
+    const svcs2 = (data.services || []), pkgs2 = (data.packages || []);
+    const group = (title, type, list) => list.length
+      ? '<div class="mb-2"><div class="text-muted" style="font-size:12px"><b>' + title + "</b></div>" +
+        list.map(x => '<label class="me-3" style="font-size:13px"><input type="checkbox" data-target="' + type + ":" + x.id +
+          '"> ' + LL.esc(x.name) + ' <span class="text-muted" style="font-size:11.5px">¥' + LL.money(x.price) + "</span></label>").join("") + "</div>"
+      : "";
+    targetsBox.innerHTML = (group("招牌服务", "service", svcs2) + group("优惠套餐", "package", pkgs2)) ||
+      '<div class="text-muted small">暂无服务项目/套餐</div>';
+  };
   const load = async () => {
     try {
       const rows = await LL.api("GET", "/api/merchant/coupons");
@@ -573,6 +626,9 @@ async function shopCoupons(main, data) {
           '<span class="text-muted small">领取 ' + (c.received || 0) + " / 核销 " + (c.used || 0) + "</span></div>" +
           '<div class="text-muted" style="font-size:12.5px">' + valueDesc + (Number(c.threshold) ? " · 满 " + LL.money(c.threshold) + " 可用" : "") +
           " · 有效期至 " + LL.esc(String(c.end_time || "").slice(0, 16)) + "</div>" +
+          '<div style="font-size:12.5px">适用范围：<span class="' +
+          (String(c.scope_desc || "") === "全场通用" ? "text-muted" : "fw-bold") + '" style="color:var(--green)">' +
+          LL.esc(c.scope_desc || "全场通用") + "</span></div>" +
           '<div class="mt-2 d-flex gap-2">' +
           (c.status !== "published" ? '<button class="btn btn-main btn-sm" data-pub="' + c.id + '">发布</button>' : "") +
           (c.status === "published" ? '<button class="btn btn-ghost btn-sm" data-off="' + c.id + '">下线</button>' : "") +
@@ -596,7 +652,8 @@ async function shopCoupons(main, data) {
       type: f.type.value, name: f.name.value.trim(),
       face_value: Number(f.face_value.value), threshold: Number(f.threshold.value),
       discount_rate: Number(f.discount_rate.value), total: Number(f.total.value),
-      scope: f.scope.value.trim(), end_time: f.end_time.value
+      scope: f.scope.value.trim(), end_time: f.end_time.value,
+      targets: collectTargets()
     };
     try {
       await LL.api("POST", "/api/merchant/coupons", body);
@@ -607,9 +664,12 @@ async function shopCoupons(main, data) {
       }
       LL.toast(tip, "ok");
       f.reset();
+      renderTargets();
       await load();
     } catch (e) { LL.toast(e.message, "err"); }
   });
+
+  renderTargets();
 
   main.querySelector("#verifyForm").addEventListener("submit", async ev => {
     ev.preventDefault();

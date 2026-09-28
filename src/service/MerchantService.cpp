@@ -107,7 +107,7 @@ nlohmann::json MerchantService::getMyMerchant(long long userId) {
     return {{"merchant", m},
             {"stores", MerchantDao::listStores(mid)},
             {"services", MerchantDao::listServices(mid)},
-            {"packages", MerchantDao::listPackages(mid)}};
+            {"packages", MerchantDao::withPackageItems(MerchantDao::listPackages(mid), mid)}};
 }
 
 void MerchantService::updateMyMerchant(long long userId, const nlohmann::json& body) {
@@ -291,7 +291,9 @@ void MerchantService::setServiceStatus(long long userId, long long serviceId,
 
 // ---------------- 消费套餐 ----------------
 nlohmann::json MerchantService::listPackages(long long userId, const std::string& status) {
-    return MerchantDao::listPackages(merchantIdOf(myMerchantOrThrow(userId)), status);
+    auto m = myMerchantOrThrow(userId);
+    return MerchantDao::withPackageItems(MerchantDao::listPackages(merchantIdOf(m), status),
+                                         merchantIdOf(m));
 }
 
 nlohmann::json MerchantService::addPackage(long long userId, const nlohmann::json& body) {
@@ -299,8 +301,17 @@ nlohmann::json MerchantService::addPackage(long long userId, const nlohmann::jso
     requireApproved(m);
     if (jsonStr(body, "name").empty()) throw BizError(resp::PARAM_ERROR, "套餐名称不能为空");
     if (jsonNum(body, "price") < 0) throw BizError(resp::PARAM_ERROR, "价格不能为负数");
-    auto id = MerchantDao::addPackage(merchantIdOf(m), body);
+    auto mid = merchantIdOf(m);
+    // 套餐包含的服务项目必须属于本店铺
+    if (body.contains("items")) {
+        for (auto& it : body["items"]) {
+            long long sid = it.is_object() ? it.value("service_id", 0LL) : 0;
+            if (sid > 0) assertServiceOwned(mid, sid);
+        }
+    }
+    auto id = MerchantDao::addPackage(mid, body);
     if (id == 0) throw BizError(resp::SERVER_ERROR, "新增套餐失败");
+    if (body.contains("items")) MerchantDao::setPackageItems(id, body["items"]);
     return {{"id", id}};
 }
 
@@ -308,9 +319,17 @@ void MerchantService::updatePackage(long long userId, long long packageId,
                                     const nlohmann::json& body) {
     auto m = myMerchantOrThrow(userId);
     requireApproved(m);
-    auto cur = assertPackageOwned(merchantIdOf(m), packageId);
+    auto mid = merchantIdOf(m);
+    auto cur = assertPackageOwned(mid, packageId);
+    if (body.contains("items")) {
+        for (auto& it : body["items"]) {
+            long long sid = it.is_object() ? it.value("service_id", 0LL) : 0;
+            if (sid > 0) assertServiceOwned(mid, sid);
+        }
+    }
     mergePresent(cur, body);
     MerchantDao::updatePackage(packageId, cur);
+    if (body.contains("items")) MerchantDao::setPackageItems(packageId, body["items"]);
 }
 
 void MerchantService::setPackageStatus(long long userId, long long packageId,

@@ -42,9 +42,12 @@ LL.views.store = async function (el, id) {
             (pic ? '<img src="' + LL.esc(pic) + '" data-view-src="' + LL.esc(pic) + '" ' +
               'style="width:52px;height:52px;object-fit:cover;border-radius:10px;border:1px solid var(--line);margin-right:10px;cursor:zoom-in">' : "") +
             '<div class="good-name"><b>' + LL.esc(x.name) + "</b><small>" +
+            (x.items_text ? "含：" + LL.esc(x.items_text) + " · " : "") +
             LL.esc(x.content || "") + (x.valid_days ? " · 有效期 " + x.valid_days + " 天" : "") +
             (Number(x.limit_count) > 0 ? " · 每人限购 " + x.limit_count + " 份" : "") + "</small></div>" +
-            '<span class="good-price">' + LL.money(x.price) + "</span>" +
+            '<span class="good-price">' + LL.money(x.price) +
+            (Number(x.origin_price) > 0 && Number(x.origin_price) > Number(x.price)
+              ? '<div class="text-muted" style="font-size:11px;text-decoration:line-through">¥' + LL.money(x.origin_price) + "</div>" : "") + "</span>" +
             '<a class="btn btn-ghost btn-sm ms-2" href="#/talk/package/' + x.id + '">口碑 ›</a>' +
             (canBuy ? '<button class="btn btn-fire btn-sm ms-1" data-order="package" data-id="' + x.id +
               '" data-name="' + LL.esc(x.name) + '">立即购买</button>' : "") +
@@ -84,20 +87,91 @@ LL.views.store = async function (el, id) {
     '<div class="row g-3"><div class="col-lg-8">' + svcHtml + pkgHtml + "</div>" +
     '<div class="col-lg-4">' + cpnHtml + "</div></div></div>";
 
+  // ---------- 选择优惠券（下单前，仅列出适用于该项目的券） ----------
+  const pickCoupon = (itemName, price, list) => new Promise(resolve => {
+    const old = document.getElementById("couponPickerModal");
+    if (old) old.remove();
+    const modalEl = document.createElement("div");
+    modalEl.id = "couponPickerModal";
+    modalEl.className = "modal fade";
+    modalEl.tabIndex = -1;
+    modalEl.innerHTML =
+      '<div class="modal-dialog modal-dialog-centered modal-dialog-scrollable"><div class="modal-content">' +
+      '<div class="modal-header"><div><h5 class="modal-title" style="font-family:var(--serif)">选择优惠券</h5>' +
+      '<div class="text-muted" style="font-size:12.5px">' + LL.esc(itemName) + " · 原价 ¥" + LL.money(price) +
+      "　共 " + list.length + " 张可用</div></div>" +
+      '<button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>' +
+      '<div class="modal-body p-2">' +
+      list.map(c => {
+        const val = c.type === "discount"
+          ? (Number(c.discount_rate) * 10).toFixed(1) + " 折" : "¥" + LL.money(c.face_value);
+        return '<div class="d-flex align-items-center justify-content-between border rounded p-2 mb-2" style="border-color:var(--line)!important">' +
+          '<div style="min-width:0"><div class="d-flex align-items-center gap-2 flex-wrap"><b>' + LL.esc(c.name) + "</b>" +
+          '<span class="badge-soft badge-approved">-' + LL.money(c.discount) + "</span></div>" +
+          '<div class="text-muted" style="font-size:11.5px">' + LL.esc(c.scope_desc || "全场通用") +
+          (Number(c.threshold) ? " · 满 " + LL.money(c.threshold) : "") +
+          " · 至 " + LL.esc(String(c.end_time || "").slice(0, 10)) + "</div></div>" +
+          '<div class="text-end" style="white-space:nowrap"><div class="text-muted" style="font-size:11.5px">实付</div>' +
+          '<b style="color:var(--persimmon)">¥' + LL.money(c.payable) + "</b> " +
+          '<button class="btn btn-fire btn-sm ms-1" data-use-coupon="' + c.claim_id + '" data-discount="' + c.discount + '">使用</button></div></div>';
+      }).join("") +
+      "</div>" +
+      '<div class="modal-footer"><span class="text-muted me-auto" style="font-size:12.5px">不使用优惠券则按原价下单</span>' +
+      '<button class="btn btn-ghost btn-sm" data-no-coupon>不使用优惠券</button>' +
+      '<button class="btn btn-ghost btn-sm" data-bs-dismiss="modal">取消</button></div>' +
+      "</div></div>";
+    document.body.appendChild(modalEl);
+    const modal = new bootstrap.Modal(modalEl);
+    let done = false;
+    modalEl.addEventListener("click", e => {
+      const useBtn = e.target.closest("[data-use-coupon]");
+      if (useBtn) {
+        done = true;
+        modal.hide();
+        resolve({ claimId: Number(useBtn.dataset.useCoupon), discount: Number(useBtn.dataset.discount) });
+        return;
+      }
+      if (e.target.closest("[data-no-coupon]")) {
+        done = true;
+        modal.hide();
+        resolve({ claimId: 0, discount: 0 });
+      }
+    });
+    modalEl.addEventListener("hidden.bs.modal", () => {
+      modalEl.remove();
+      if (!done) resolve(null);   // 关闭 = 放弃下单
+    });
+    modal.show();
+  });
+
   // ---------- 下单（下单主体＝门店） ----------
   el.querySelectorAll("[data-order]").forEach(btn => btn.addEventListener("click", async () => {
     if (!LL.user) { LL.openAuth("login"); return; }
     if (LL.user.role !== "consumer") { LL.toast("请使用消费者账号下单", "info"); return; }
     const type = btn.dataset.order;
+    const id = Number(btn.dataset.id);
     const label = type === "service" ? "服务" : "套餐";
-    if (!confirm("确认在「" + s.name + "」下单" + label + "「" + btn.dataset.name + "」？")) return;
     const raw = btn.innerHTML;
     btn.disabled = true;
-    btn.innerHTML = "提交中…";
+    btn.innerHTML = "请求中…";
     try {
+      // 该项目在本门店可用的优惠券（含抵扣计算）
+      let usable = [];
+      try { usable = await LL.api("GET", "/api/store/" + s.id + "/coupons/usable?item_type=" + type + "&item_id=" + id); }
+      catch (e) { usable = []; }
+      let claimId = 0, discount = 0;
+      if (usable.length) {
+        const pick = await pickCoupon(btn.dataset.name, usable[0].payable + usable[0].discount, usable);
+        if (!pick) { btn.disabled = false; btn.innerHTML = raw; return; }  // 放弃
+        claimId = pick.claimId;
+        discount = pick.discount;
+        btn.innerHTML = "提交中…";
+      }
       const o = await LL.api("POST", "/api/store/" + s.id + "/order",
-        { item_type: type, item_id: Number(btn.dataset.id) });
-      LL.toast("下单成功！订单号 " + o.order_no + "，可在「我的-我的订单」核销或退款", "ok", 3200);
+        { item_type: type, item_id: id, coupon_claim_id: claimId });
+      LL.toast("下单成功！" + (Number(o.discount) > 0
+        ? "已抵扣 ¥" + LL.money(o.discount) + "，实付 ¥" + LL.money(o.amount) + "；"
+        : "订单号 " + o.order_no + "；") + "可在「我的-我的订单」核销或退款", "ok", 3400);
       btn.innerHTML = "已下单";
     } catch (e) {
       LL.toast(e.message, "err");
@@ -129,7 +203,9 @@ LL.views.store = async function (el, id) {
         return '<div class="d-flex align-items-center gap-2 border rounded p-2 mb-2" style="border-color:var(--line)!important">' +
           '<div class="text-center" style="flex:0 0 62px;color:#cf4a2b;font-weight:800;border-right:1px dashed #e4c4b8">' + val + "</div>" +
           '<div style="flex:1;min-width:0"><div style="font-weight:600;font-size:13.5px">' + LL.esc(r.name) + "</div>" +
-          '<div class="text-muted" style="font-size:11.5px">' + limit + " · 至 " +
+          '<div class="text-muted" style="font-size:11.5px">' + limit +
+          " · 适用：" + LL.esc(r.scope_desc || "全场通用") + "</div>" +
+          '<div class="text-muted" style="font-size:11.5px">至 ' +
           LL.esc(String(r.end_time || "").slice(0, 10)) + "</div></div>" + act + "</div>";
       }).join("");
       cpnBox.querySelectorAll("[data-receive]").forEach(b => b.addEventListener("click", async () => {

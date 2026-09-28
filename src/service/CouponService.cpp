@@ -61,6 +61,24 @@ nlohmann::json CouponService::create(long long merchantUserId, const nlohmann::j
                         {"scope", jsonStr(body, "scope")}};
     auto id = CouponDao::create(m.value("id", 0LL), c);
     if (id == 0) throw BizError(resp::SERVER_ERROR, "创建优惠活动失败");
+    // 适用对象（为空 = 全场通用）；绑定前校验对象归属本店铺
+    if (body.contains("targets")) {
+        long long mid = m.value("id", 0LL);
+        for (auto& t : body["targets"]) {
+            std::string type = t.is_object() ? jsonStr(t, "target_type") : "";
+            long long gid = t.is_object() ? t.value("target_id", 0LL) : 0;
+            if (type == "service" && gid > 0) {
+                auto s = MerchantDao::serviceById(gid);
+                if (s.is_null() || s.value("merchant_id", 0LL) != mid)
+                    throw BizError(resp::PARAM_ERROR, "绑定的服务项目不属于当前店铺");
+            } else if (type == "package" && gid > 0) {
+                auto p = MerchantDao::packageById(gid);
+                if (p.is_null() || p.value("merchant_id", 0LL) != mid)
+                    throw BizError(resp::PARAM_ERROR, "绑定的优惠套餐不属于当前店铺");
+            }
+        }
+        CouponDao::setTargets(id, body["targets"]);
+    }
     // 新活动默认参与本商户所有门店（可在「门店管理」按门店取消参与）
     MerchantDao::fanoutItemToStores(m.value("id", 0LL), "coupon", id);
     return CouponDao::byId(id);
@@ -68,7 +86,8 @@ nlohmann::json CouponService::create(long long merchantUserId, const nlohmann::j
 
 nlohmann::json CouponService::listByMerchant(long long merchantUserId) {
     auto m = myMerchantApproved(merchantUserId);
-    return CouponDao::listByMerchant(m.value("id", 0LL));
+    return CouponDao::withTargets(CouponDao::listByMerchant(m.value("id", 0LL)),
+                                  m.value("id", 0LL));
 }
 
 void CouponService::setStatus(long long merchantUserId, long long couponId,
@@ -85,7 +104,7 @@ void CouponService::setStatus(long long merchantUserId, long long couponId,
 nlohmann::json CouponService::listPublished(long long merchantId) {
     if (MerchantDao::byId(merchantId).is_null())
         throw BizError(resp::NOT_FOUND, "商户不存在");
-    return CouponDao::listPublished(merchantId);
+    return CouponDao::withTargets(CouponDao::listPublished(merchantId), merchantId);
 }
 
 nlohmann::json CouponService::receive(long long userId, long long couponId) {
@@ -103,14 +122,68 @@ nlohmann::json CouponService::myClaims(long long userId, const std::string& stat
     // 对已过期未使用的券在返回前统一标记为 expired，避免前端误用
     auto rows = CouponDao::listUserClaims(userId, status.empty() ? "all" : status);
     std::string now = timeutil::nowStr();
+    nlohmann::json out = nlohmann::json::array();
     for (auto& row : rows) {
         if (jsonStr(row, "claim_status") == "unused" &&
-            (jsonStr(row, "coupon_status") != "published" ||
-             now > jsonStr(row, "end_time"))) {
+            (jsonStr(row, "coupon_status") != "published" || now > jsonStr(row, "end_time"))) {
             row["claim_status"] = "expired";
         }
+        // 适用范围（空 = 全场通用）
+        auto targets = CouponDao::listTargets(row.value("coupon_id", 0LL));
+        row["targets"] = targets;
+        std::string text;
+        for (auto& t : targets) {
+            if (!text.empty()) text += "、";
+            text += (jsonStr(t, "target_type") == "package" ? "套餐：" : "服务：") + jsonStr(t, "name");
+        }
+        row["scope_desc"] = text.empty() ? "全场通用" : text;
+        out.push_back(row);
     }
-    return rows;
+    return out;
+}
+
+// 该用户在某门店针对某项目可用的券（含抵扣金额）
+nlohmann::json CouponService::usableFor(long long userId, long long storeId,
+                                        const std::string& itemType, long long itemId,
+                                        double amount) {
+    if (itemType != "service" && itemType != "package")
+        throw BizError(resp::PARAM_ERROR, "item_type 仅支持 service / package");
+    auto store = MerchantDao::storeById(storeId);
+    if (store.is_null()) throw BizError(resp::NOT_FOUND, "门店不存在");
+    long long merchantId = store.value("merchant_id", 0LL);
+    std::string now = timeutil::nowStr();
+
+    nlohmann::json out = nlohmann::json::array();
+    for (auto& claim : CouponDao::listUserClaims(userId, "unused")) {
+        // 券模板必须属于该门店所属商户、已发布且在有效期内、并且本门店参与该活动
+        if (claim.value("merchant_id", 0LL) != merchantId) continue;
+        if (jsonStr(claim, "coupon_status") != "published") continue;
+        if (now < jsonStr(claim, "start_time") || now > jsonStr(claim, "end_time")) continue;
+        if (!MerchantDao::isOnSaleAtStore(storeId, "coupon", claim.value("coupon_id", 0LL))) continue;
+        // 适用对象：券绑定了项目时，必须包含当前项目
+        if (!CouponDao::isApplicable(claim.value("coupon_id", 0LL), itemType, itemId)) continue;
+        // 门槛
+        double threshold = claim.value("threshold", 0.0);
+        if (amount < threshold) continue;
+
+        // 抵扣计算
+        double discount = 0;
+        std::string type = jsonStr(claim, "type");
+        if (type == "discount") {
+            double rate = claim.value("discount_rate", 0.0);
+            if (rate > 0 && rate <= 1) discount = amount * (1 - rate);
+        } else {
+            discount = claim.value("face_value", 0.0);
+        }
+        if (discount <= 0) continue;
+        if (discount > amount) discount = amount;  // 抵扣不超过商品金额
+
+        nlohmann::json row = claim;
+        row["discount"] = discount;
+        row["payable"] = amount - discount;
+        out.push_back(row);
+    }
+    return out;
 }
 
 nlohmann::json CouponService::verify(long long merchantUserId, const std::string& code) {

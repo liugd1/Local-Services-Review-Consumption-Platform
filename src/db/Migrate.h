@@ -77,6 +77,12 @@ inline bool run() {
     if (!hasColumn("packages", "images"))
         db.execute("ALTER TABLE packages ADD COLUMN images TEXT DEFAULT ''");
 
+    // 5.1) 订单：补充用券字段（优惠抵扣金额 + 使用的卡券记录）
+    if (!hasColumn("orders", "discount"))
+        db.execute("ALTER TABLE orders ADD COLUMN discount REAL NOT NULL DEFAULT 0");
+    if (!hasColumn("orders", "coupon_claim_id"))
+        db.execute("ALTER TABLE orders ADD COLUMN coupon_claim_id INTEGER REFERENCES coupon_user (id)");
+
     // 6) 门店经营项目上架关系回填：存量门店 × 服务/套餐/活动 默认「上架」，
     //    保证升级后原有店铺仍可在门店页下单
     const std::string now = timeutil::nowStr();

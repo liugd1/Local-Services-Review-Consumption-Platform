@@ -280,20 +280,46 @@ CREATE TABLE IF NOT EXISTS coupon_user (
 
 -- 21. 订单（下单主体为「门店」；支持服务项目 / 优惠套餐两类商品）
 CREATE TABLE IF NOT EXISTS orders (
-  id         INTEGER PRIMARY KEY AUTOINCREMENT,
-  order_no   TEXT    NOT NULL UNIQUE,
-  user_id    INTEGER NOT NULL REFERENCES users (id),
-  store_id   INTEGER REFERENCES stores (id),      -- 下单门店（消费者在哪个门店消费）
-  item_type  TEXT    NOT NULL DEFAULT 'package'
-             CHECK (item_type IN ('package', 'service')),
-  package_id INTEGER REFERENCES packages (id),    -- item_type=package 时有效
-  service_id INTEGER REFERENCES services (id),    -- item_type=service 时有效
-  amount     REAL    NOT NULL,
-  status     TEXT    NOT NULL DEFAULT 'purchased'
-             CHECK (status IN ('purchased', 'used', 'refunded')),
-  created_at TEXT    NOT NULL,
-  used_time  TEXT
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  order_no        TEXT    NOT NULL UNIQUE,
+  user_id         INTEGER NOT NULL REFERENCES users (id),
+  store_id        INTEGER REFERENCES stores (id),      -- 下单门店（消费者在哪个门店消费）
+  item_type       TEXT    NOT NULL DEFAULT 'package'
+                  CHECK (item_type IN ('package', 'service')),
+  package_id      INTEGER REFERENCES packages (id),    -- item_type=package 时有效
+  service_id      INTEGER REFERENCES services (id),    -- item_type=service 时有效
+  amount          REAL    NOT NULL,                    -- 实付金额（已扣减优惠）
+  discount        REAL    NOT NULL DEFAULT 0,          -- 优惠券抵扣金额
+  coupon_claim_id INTEGER REFERENCES coupon_user (id), -- 使用的优惠券（我的卡券记录）
+  status          TEXT    NOT NULL DEFAULT 'purchased'
+                  CHECK (status IN ('purchased', 'used', 'refunded')),
+  created_at      TEXT    NOT NULL,
+  used_time       TEXT
 );
+
+-- 21d. 优惠套餐 × 服务项目（套餐由一个或多个服务项目组成，可含数量）
+CREATE TABLE IF NOT EXISTS package_items (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  package_id INTEGER NOT NULL REFERENCES packages (id),
+  service_id INTEGER NOT NULL REFERENCES services (id),
+  quantity   INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT    NOT NULL,
+  UNIQUE (package_id, service_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_package_items_pkg ON package_items (package_id);
+
+-- 21e. 优惠活动适用对象（为空表示全场通用；否则仅可在指定的服务项目/套餐使用）
+CREATE TABLE IF NOT EXISTS coupon_targets (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  coupon_id   INTEGER NOT NULL REFERENCES coupons (id),
+  target_type TEXT    NOT NULL CHECK (target_type IN ('service', 'package')),
+  target_id   INTEGER NOT NULL,
+  created_at  TEXT    NOT NULL,
+  UNIQUE (coupon_id, target_type, target_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_coupon_targets_coupon ON coupon_targets (coupon_id);
 
 -- 21a. 门店经营项目上架关系：门店 × 服务项目（是否运营由门店决定）
 CREATE TABLE IF NOT EXISTS store_services (

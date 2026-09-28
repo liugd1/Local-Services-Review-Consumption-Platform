@@ -8,7 +8,8 @@ namespace OrderDao {
 
 // 创建订单（归属与上架校验在 Service），itemType: package / service
 long long create(long long userId, long long storeId, const std::string& itemType,
-                 long long itemId, double amount, const std::string& orderNo);
+                 long long itemId, double amount, const std::string& orderNo,
+                 double discount = 0, long long couponClaimId = 0);
 // 用户对某商品的有效购买数量（限购判断，已退款不计）
 long long countPurchased(long long userId, const std::string& itemType, long long itemId);
 // 订单详情（含门店名、项目名、商户 id）

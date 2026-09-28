@@ -14,32 +14,52 @@ const char* kOrderSelect =
     "IFNULL(p.merchant_id, s.merchant_id) AS merchant_id, "
     "CASE o.item_type WHEN 'package' THEN p.name ELSE s.name END AS item_name, "
     "p.content AS package_content, p.valid_days AS package_valid_days, "
-    "s.applicable_time AS service_applicable_time, s.price_unit AS service_price_unit "
+    "s.applicable_time AS service_applicable_time, s.price_unit AS service_price_unit, "
+    "cu.code AS coupon_code, c.name AS coupon_name, c.type AS coupon_type "
     "FROM orders o "
     "LEFT JOIN stores st ON st.id = o.store_id "
     "LEFT JOIN packages p ON p.id = o.package_id "
-    "LEFT JOIN services s ON s.id = o.service_id ";
+    "LEFT JOIN services s ON s.id = o.service_id "
+    "LEFT JOIN coupon_user cu ON cu.id = o.coupon_claim_id "
+    "LEFT JOIN coupons c ON c.id = cu.coupon_id ";
 
 }  // namespace
 
 long long create(long long userId, long long storeId, const std::string& itemType, long long itemId,
-                 double amount, const std::string& orderNo) {
+                 double amount, const std::string& orderNo, double discount,
+                 long long couponClaimId) {
     auto& db = Database::instance();
     nlohmann::json row;
+    const std::string disc = std::to_string(discount);
+    const std::string claim = couponClaimId > 0 ? std::to_string(couponClaimId) : "";
     if (itemType == "service") {
         row = db.queryOne(
             "INSERT INTO orders (order_no, user_id, store_id, item_type, package_id, service_id, "
-            "amount, status, created_at) "
-            "VALUES (?, ?, ?, 'service', NULL, ?, ?, 'purchased', ?) RETURNING id",
-            {orderNo, std::to_string(userId), std::to_string(storeId), std::to_string(itemId),
-             std::to_string(amount), timeutil::nowStr()});
+            "amount, discount, coupon_claim_id, status, created_at) "
+            "VALUES (?, ?, ?, 'service', NULL, ?, ?, ?, " +
+                std::string(claim.empty() ? "NULL" : "?") +
+                ", 'purchased', ?) RETURNING id",
+            claim.empty()
+                ? std::vector<std::string>{orderNo, std::to_string(userId), std::to_string(storeId),
+                                           std::to_string(itemId), std::to_string(amount), disc,
+                                           timeutil::nowStr()}
+                : std::vector<std::string>{orderNo, std::to_string(userId), std::to_string(storeId),
+                                           std::to_string(itemId), std::to_string(amount), disc,
+                                           claim, timeutil::nowStr()});
     } else {
         row = db.queryOne(
             "INSERT INTO orders (order_no, user_id, store_id, item_type, package_id, service_id, "
-            "amount, status, created_at) "
-            "VALUES (?, ?, ?, 'package', ?, NULL, ?, 'purchased', ?) RETURNING id",
-            {orderNo, std::to_string(userId), std::to_string(storeId), std::to_string(itemId),
-             std::to_string(amount), timeutil::nowStr()});
+            "amount, discount, coupon_claim_id, status, created_at) "
+            "VALUES (?, ?, ?, 'package', ?, NULL, ?, ?, " +
+                std::string(claim.empty() ? "NULL" : "?") +
+                ", 'purchased', ?) RETURNING id",
+            claim.empty()
+                ? std::vector<std::string>{orderNo, std::to_string(userId), std::to_string(storeId),
+                                           std::to_string(itemId), std::to_string(amount), disc,
+                                           timeutil::nowStr()}
+                : std::vector<std::string>{orderNo, std::to_string(userId), std::to_string(storeId),
+                                           std::to_string(itemId), std::to_string(amount), disc,
+                                           claim, timeutil::nowStr()});
     }
     return row.is_null() ? 0 : row.value("id", 0LL);
 }

@@ -304,9 +304,13 @@ LL.views.merchant = async function (el, id) {
           (pic ? '<img src="' + LL.esc(pic) + '" data-view-src="' + LL.esc(pic) + '" ' +
             'style="width:52px;height:52px;object-fit:cover;border-radius:10px;border:1px solid var(--line);margin-right:10px;cursor:zoom-in">' : "") +
           '<div class="good-name"><b>' + LL.esc(p.name) + "</b><small>" +
+          (p.items_text ? "含：" + LL.esc(p.items_text) + " · " : "") +
           LL.esc(p.content || "") + (p.valid_days ? " · 有效期 " + p.valid_days + " 天" : "") +
           (stores.length ? " · " + stores.length + " 家门店在售" : "") + "</small></div>" +
-          '<span class="good-price">' + LL.money(p.price) + '</span>' +
+          '<span class="good-price">' + LL.money(p.price) +
+          (Number(p.origin_price) > 0 && Number(p.origin_price) > Number(p.price)
+            ? '<div class="text-muted" style="font-size:11px;text-decoration:line-through">¥' + LL.money(p.origin_price) + "</div>" : "") +
+          "</span>" +
           '<a class="btn btn-ghost btn-sm ms-2" href="#/talk/package/' + p.id + '">口碑评价 ›</a>' +
           (stores.length
             ? '<button class="btn btn-fire btn-sm ms-1" data-pick="package:' + p.id + '">' +

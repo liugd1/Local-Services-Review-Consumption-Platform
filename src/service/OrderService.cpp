@@ -3,6 +3,7 @@
 #include <random>
 #include <string>
 
+#include "dao/CouponDao.h"
 #include "dao/MerchantDao.h"
 #include "dao/OrderDao.h"
 #include "model/Models.h"
@@ -31,7 +32,8 @@ long long idOrZero(const nlohmann::json& j, const char* key) {
 }  // namespace
 
 nlohmann::json OrderService::buyAtStore(long long userId, long long storeId,
-                                        const std::string& itemType, long long itemId) {
+                                        const std::string& itemType, long long itemId,
+                                        long long couponClaimId) {
     if (itemType != "service" && itemType != "package")
         throw BizError(resp::PARAM_ERROR, "item_type 仅支持 service / package");
     auto store = MerchantDao::storeById(storeId);
@@ -64,10 +66,51 @@ nlohmann::json OrderService::buyAtStore(long long userId, long long storeId,
     if (limit > 0 && OrderDao::countPurchased(userId, itemType, itemId) >= limit)
         throw BizError(resp::CONFLICT, "该项目每人限购 " + std::to_string(limit) + " 份");
 
-    auto id = OrderDao::create(userId, storeId, itemType, itemId, item.value("price", 0.0),
-                               genOrderNo());
+    double origin = item.value("price", 0.0);
+    double discount = 0;
+    long long usedClaimId = 0;
+
+    // 使用优惠券：校验归属 / 状态 / 有效期 / 门店参与 / 适用对象 / 门槛，并计算抵扣
+    if (couponClaimId > 0) {
+        auto claim = CouponDao::claimById(couponClaimId);
+        if (claim.is_null() || claim.value("user_id", 0LL) != userId)
+            throw BizError(resp::NOT_FOUND, "优惠券不存在或不属于你");
+        if (jsonStr(claim, "claim_status") != "unused")
+            throw BizError(resp::CONFLICT, "该优惠券已使用或已过期");
+        if (claim.value("merchant_id", 0LL) != store.value("merchant_id", 0LL))
+            throw BizError(resp::CONFLICT, "该优惠券不适用于本店铺");
+        if (jsonStr(claim, "status") != "published")
+            throw BizError(resp::CONFLICT, "该优惠活动已下线");
+        std::string now = timeutil::nowStr();
+        if (now < jsonStr(claim, "start_time") || now > jsonStr(claim, "end_time"))
+            throw BizError(resp::CONFLICT, "该优惠券不在有效期内");
+        if (!MerchantDao::isOnSaleAtStore(storeId, "coupon", claim.value("coupon_id", 0LL)))
+            throw BizError(resp::CONFLICT, "本门店不参与该优惠活动");
+        // 适用范围：券绑定对象时，只能在绑定的服务项目 / 优惠套餐中使用
+        if (!CouponDao::isApplicable(claim.value("coupon_id", 0LL), itemType, itemId))
+            throw BizError(resp::CONFLICT, "该优惠券仅可在指定的服务项目/优惠套餐中使用");
+        if (origin < claim.value("threshold", 0.0))
+            throw BizError(resp::CONFLICT, "未达到该券的使用门槛");
+        if (jsonStr(claim, "type") == "discount") {
+            double rate = claim.value("discount_rate", 0.0);
+            if (rate > 0 && rate <= 1) discount = origin * (1 - rate);
+        } else {
+            discount = claim.value("face_value", 0.0);
+        }
+        if (discount <= 0) throw BizError(resp::CONFLICT, "该券无可抵扣金额");
+        if (discount > origin) discount = origin;
+        usedClaimId = couponClaimId;
+    }
+
+    double payable = origin - discount;
+    auto id = OrderDao::create(userId, storeId, itemType, itemId, payable, genOrderNo(), discount,
+                               usedClaimId);
     if (id == 0) throw BizError(resp::SERVER_ERROR, "下单失败");
-    return OrderDao::orderById(id);
+    // 券在下单时即占用核销（退款会自动归还）
+    if (usedClaimId > 0) CouponDao::markClaimUsed(usedClaimId);
+    auto order = OrderDao::orderById(id);
+    order["origin_amount"] = origin;
+    return order;
 }
 
 nlohmann::json OrderService::buy(long long userId, long long packageId) {
@@ -114,6 +157,9 @@ void OrderService::refundOrder(long long userId, long long orderId) {
                                                                       : "当前状态不可退款");
     if (!OrderDao::markRefunded(orderId, userId))
         throw BizError(resp::CONFLICT, "退款失败，可能已被处理");
+    // 使用过优惠券的订单退款：把券归还为「未使用」
+    long long claimId = idOrZero(o, "coupon_claim_id");
+    if (claimId > 0) CouponDao::releaseClaim(claimId);
 }
 
 nlohmann::json OrderService::myOrders(long long userId, const std::string& status, int page,

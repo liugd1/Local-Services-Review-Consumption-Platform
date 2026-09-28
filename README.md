@@ -33,7 +33,7 @@
 | 4 | 收藏与互动 | 收藏（商户 / 服务）、关注、浏览足迹、消费记账 | ✅ |
 | 5 | 评分与评价 | 对象化解构评价（一对象一评）、三维评分、图文、点赞、任意层回复、举报、掌柜回复 | ✅ |
 | 6 | 优惠活动 | 券 / 满减 / 折扣 / 套餐券；创建→上下线；领取防超发限领一张；核销码校验 | ✅ |
-| 7 | 门店订单 | **在门店下单**（服务项目 / 优惠套餐）→ 核销自动落消费流水 → 未使用可退款（状态机） | ✅ |
+| 7 | 门店订单 | **在门店下单**（服务项目 / 优惠套餐）；**套餐由服务项目组合而成**；**优惠券可绑定适用对象**并用券抵扣；核销自动落消费流水；未使用可退款（退款归还券） | ✅ |
 | 8 | 统计看板 | 商户经营看板 + 平台运营看板；近 7 日趋势、热门服务、类别分布（ECharts） | ✅ |
 
 ---
@@ -140,7 +140,19 @@ build/locallife.exe          # Windows
 > 说明：为兼容历史数据，`POST /api/package/{id}/buy` 仍保留（自动选取任一在售该套餐的门店），
 > 但前端已不再提供「店铺层级直接下单」入口。
 
-### 4.4 图文描述（店铺 / 门店 / 服务 / 套餐）
+### 4.5 优惠套餐 = 服务项目组合（模块 7）
+
+- **套餐内容即服务项目组合**：新建/编辑套餐时必须绑定**一个或多个服务项目并设置数量**（如 `aa×1 + bb×2`），
+  系统实时计算「服务项目原价合计」，套餐售价可低于原价（相当于折扣），消费者端会同时展示构成与划线原价。
+- **优惠活动绑定适用范围**：创建活动时可勾选**适用的服务项目 / 优惠套餐**（可多选，不勾选 = 全场通用），
+  绑定后该券**只能**在所选对象中使用；掌柜台活动列表、消费者门店页与本店活动、我的卡券都会显示适用范围文案。
+- **用券下单**：消费者在门店页下单时，系统按「门店参与 + 券归属本店铺 + 在有效期内 + 适用于该项目 + 达到门槛」过滤出可用券，
+  弹窗展示每张券的抵扣与实付金额（也可选择"不使用优惠券"）；下单时核销券并记录 `discount` 与实付金额，
+  **订单退款会自动把券归还为未使用**。
+- 相关接口：`GET /api/store/{id}/coupons/usable?item_type=&item_id=`（可用券）、
+  `POST /api/store/{id}/order`（body 增加可选 `coupon_claim_id`）。
+
+### 4.6 图文描述（店铺 / 门店 / 服务 / 套餐）
 
 - 店铺主可在掌柜台为四类对象上传**一张或多张图片**（jpg / png / gif / webp，单张 ≤8MB，多图逗号分隔存储）：
   - **店铺**：「经营概览 → 商户资料 → 店铺图片」（第一张作为店铺主页封面）；
@@ -190,7 +202,7 @@ build/locallife.exe          # Windows
 | 层 | 选型 |
 | --- | --- |
 | 后端 | C++17；cpp-httplib（RESTful 路由，`:param` 风格）；nlohmann/json（请求/响应 JSON） |
-| 存储 | SQLite 3.53.4（单文件，随仓内置 amalgamation）；`sql/schema.sql` 27 张业务表 |
+| 存储 | SQLite 3.53.4（单文件，随仓内置 amalgamation）；`sql/schema.sql` 29 张业务表 |
 | 安全 | 口令 PicoSHA2 加盐哈希；Bearer Token 会话（7 天）；参数绑定防 SQL 注入 |
 | 并发 | 单连接 + FULLMUTEX + 互斥锁；写操作 `BEGIN IMMEDIATE`；领取等场景用原子 UPDATE 防超发 |
 | 前端 | 原生 HTML / CSS / JS（无框架）SPA + hash 路由；Bootstrap 5.3 + Bootstrap Icons（CDN）；ECharts 5.5 |
@@ -205,7 +217,7 @@ build/locallife.exe          # Windows
 ```
 Local-Services-Review-Consumption-Platform/
 ├── CMakeLists.txt                  构建脚本（C++17、随仓依赖、静态资源)
-├── sql/schema.sql                  27 张业务表（幂等 DDL）+ 分类初始数据
+├── sql/schema.sql                  29 张业务表（幂等 DDL）+ 分类初始数据
 ├── src/
 │   ├── main.cpp                    程序入口：初始化 DB → 迁移 → 启动 HTTP 服务
 │   ├── server/Api.{h,cpp}          统一 JSON 响应、鉴权中间件、路由注册
@@ -240,7 +252,7 @@ Local-Services-Review-Consumption-Platform/
 | 评价体系 | `reviews`、`review_images`、`review_likes`、`review_replies`、`review_reports` | 对象化评价、晒图、点赞、掌柜回复、举报 |
 | 评论互动 | `review_comments`（自引用 `parent_id` 支持任意层）、`comment_likes`、`comment_reports` | 评论楼、评论点赞、评论举报 |
 | 用户行为 | `favorites`、`follows`、`browse_history`、`consumption_records` | 收藏、关注、浏览足迹、消费流水 |
-| 营销与交易 | `coupons`、`coupon_user`、`orders`、`store_services`、`store_packages`、`store_coupons` | 优惠活动、领券记录（含核销码 / 状态）、**门店订单**（`store_id + item_type + 项目 id`）、门店级上架关系 |
+| 营销与交易 | `coupons`、`coupon_user`、`orders`、`store_services`、`store_packages`、`store_coupons`、`package_items`、`coupon_targets` | 优惠活动、领券记录（含核销码 / 状态）、**门店订单**（`store_id + item_type + 项目 id + 用券抵扣`）、门店级上架关系、**套餐×服务组合**、**券适用对象** |
 | 平台 | `operation_stats` | 平台运营指标留存 |
 
 **一致性约定**
@@ -279,6 +291,7 @@ Local-Services-Review-Consumption-Platform/
 | 门店经营项目（上架） | `GET /api/merchant/stores/{id}/offerings`、`PUT .../offerings`（单项）、`PUT .../offerings/bulk`（批量） |
 | 掌柜回复评价 | `POST /api/merchant/review/{id}/reply` |
 | 优惠活动管理 | `GET|POST /api/merchant/coupons`、`PUT /api/merchant/coupons/{id}/status` |
+| 门店可用券查询 | `GET /api/store/{id}/coupons/usable?item_type=&item_id=` |
 | 优惠券核销 | `POST /api/merchant/coupon/verify` |
 | 经营统计 | `GET /api/merchant/stats` |
 | 图片上传 | `POST /api/upload`（multipart，白名单 jpg/png/gif/webp，≤8MB） |

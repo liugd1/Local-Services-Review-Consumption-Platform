@@ -20,4 +20,9 @@ public:
 
     // 商户核销（输入券码，校验归属/状态/有效期后核销）
     static nlohmann::json verify(long long merchantUserId, const std::string& code);
+
+    // 该用户在某门店针对某项目「可用」的券（含抵扣金额计算）
+    // item_type: service / package
+    static nlohmann::json usableFor(long long userId, long long storeId, const std::string& itemType,
+                                    long long itemId, double amount);
 };

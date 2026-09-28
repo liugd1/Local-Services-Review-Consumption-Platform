@@ -209,6 +209,7 @@ async function renderMyCoupons(main) {
           '<div style="flex:1;min-width:220px"><div class="d-flex align-items-center gap-2 flex-wrap"><b>' + LL.esc(r.name) +
           '</b><span class="badge-soft badge-' + LL.statusClass(cs).replace("badge-", "") + '">' + LL.statusZh(cs) + "</span></div>" +
           '<div class="text-muted" style="font-size:12.5px">' + LL.esc(r.merchant_name) + " · " + limitDesc +
+          " · 适用：" + LL.esc(r.scope_desc || "全场通用") +
           " · 有效期至 " + LL.esc(String(r.end_time || "").slice(0, 10)) + "</div>" +
           '<div class="mt-1"><code style="font-size:13px;letter-spacing:2px">' + LL.esc(r.code) + "</code>" +
           '<span class="text-muted small ms-2">到店向商家出示核销码</span></div></div>' +
@@ -249,11 +250,17 @@ async function renderMyOrders(main) {
           const sub = o.item_type === "package"
             ? (o.package_content || "") + (o.package_valid_days ? " · 有效期 " + o.package_valid_days + " 天" : "")
             : (o.service_applicable_time || "");
+          const couponLine = Number(o.discount) > 0
+            ? '<div class="text-muted" style="font-size:11.5px">用券：' + LL.esc(o.coupon_name || "优惠券") +
+              " -¥" + LL.money(o.discount) + (Number(o.discount) > 0 && Number(o.discount) > 0 ? "" : "") + "</div>"
+            : "";
           return '<tr><td class="text-muted small">' + LL.esc(o.order_no) + "</td>" +
             "<td>" + typeTag + ' <b>' + LL.esc(o.item_name || "—") + "</b>" +
-            (sub ? '<div class="text-muted" style="font-size:11.5px">' + LL.esc(sub) + "</div>" : "") + "</td>" +
+            (sub ? '<div class="text-muted" style="font-size:11.5px">' + LL.esc(sub) + "</div>" : "") + couponLine + "</td>" +
             "<td>" + LL.esc(o.store_name || "—") + (o.store_area ? '<div class="text-muted" style="font-size:11.5px">' + LL.esc(o.store_area) + "</div>" : "") + "</td>" +
-            '<td class="price-min">' + LL.money(o.amount) + "</td>" +
+            '<td class="price-min">' + LL.money(o.amount) +
+            (Number(o.discount) > 0 ? '<div class="text-muted" style="font-size:11px">原价 ¥' +
+              LL.money(Number(o.amount) + Number(o.discount)) + "</div>" : "") + "</td>" +
             '<td class="text-muted" style="font-size:12px">' + LL.esc(String(o.created_at || "").slice(0, 16)) + "</td>" +
             '<td><span class="badge-soft badge-' + LL.statusClass(o.status).replace("badge-", "") + '">' + LL.statusZh(o.status) + "</span></td>" +
             "<td>" + acts + "</td></tr>";

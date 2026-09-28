@@ -1,5 +1,7 @@
 #include "dao/MerchantDao.h"
 
+#include <map>
+
 #include "db/Database.h"
 #include "model/Models.h"
 #include "util/Time.h"
@@ -293,7 +295,72 @@ bool updatePackageStatus(long long id, const std::string& status) {
 nlohmann::json packageById(long long id) {
     auto row = Database::instance().queryOne("SELECT * FROM packages WHERE id = ?",
                                              {std::to_string(id)});
-    return row.is_null() ? nlohmann::json(nullptr) : row;
+    if (row.is_null()) return nullptr;
+    row["items"] = listPackageItems(id);
+    return row;
+}
+
+// ---------------- 套餐 × 服务项目 ----------------
+void setPackageItems(long long packageId, const nlohmann::json& items) {
+    auto& db = Database::instance();
+    db.execute("DELETE FROM package_items WHERE package_id = ?", {std::to_string(packageId)});
+    if (!items.is_array()) return;
+    const std::string now = timeutil::nowStr();
+    for (const auto& it : items) {
+        long long sid = 0;
+        int qty = 1;
+        if (it.is_object()) {
+            sid = it.value("service_id", 0LL);
+            qty = it.value("quantity", 1);
+        }
+        if (sid <= 0 || qty <= 0) continue;
+        db.execute(
+            "INSERT OR REPLACE INTO package_items (package_id, service_id, quantity, created_at) "
+            "VALUES (?, ?, ?, ?)",
+            {std::to_string(packageId), std::to_string(sid), std::to_string(qty), now});
+    }
+}
+
+nlohmann::json listPackageItems(long long packageId) {
+    return Database::instance().query(
+        "SELECT pi.service_id, pi.quantity, s.name, s.price, s.price_unit, s.images "
+        "FROM package_items pi JOIN services s ON s.id = pi.service_id "
+        "WHERE pi.package_id = ? ORDER BY pi.id",
+        {std::to_string(packageId)});
+}
+
+nlohmann::json withPackageItems(const nlohmann::json& packages, long long merchantId) {
+    auto& db = Database::instance();
+    auto rows = db.query(
+        "SELECT pi.package_id, pi.service_id, pi.quantity, s.name, s.price, s.price_unit "
+        "FROM package_items pi "
+        "JOIN services s ON s.id = pi.service_id "
+        "JOIN packages p ON p.id = pi.package_id "
+        "WHERE p.merchant_id = ? ORDER BY pi.id",
+        {std::to_string(merchantId)});
+    std::map<long long, nlohmann::json> grouped;
+    for (auto& r : rows) {
+        long long pid = r.value("package_id", 0LL);
+        grouped[pid].push_back(r);
+    }
+    nlohmann::json out = nlohmann::json::array();
+    for (auto& p : packages) {
+        nlohmann::json row = p;
+        long long pid = p.value("id", 0LL);
+        nlohmann::json items = grouped.count(pid) ? grouped[pid] : nlohmann::json::array();
+        double origin = 0;
+        std::string text;
+        for (auto& it : items) {
+            origin += it.value("price", 0.0) * it.value("quantity", 1);
+            if (!text.empty()) text += " + ";
+            text += jsonStr(it, "name") + "×" + std::to_string(it.value("quantity", 1));
+        }
+        row["items"] = items;
+        row["items_text"] = text;
+        row["origin_price"] = origin;
+        out.push_back(row);
+    }
+    return out;
 }
 
 // ---------------- 门店经营项目上架关系 ----------------

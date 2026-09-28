@@ -1,5 +1,6 @@
 #include "service/SearchService.h"
 
+#include "dao/CouponDao.h"
 #include "dao/InteractionDao.h"
 #include "dao/MerchantDao.h"
 #include "dao/ReviewDao.h"
@@ -52,7 +53,8 @@ nlohmann::json SearchService::detail(long long merchantId, long long viewerId,
     // 公开数据仅展示上架的服务与套餐
     m["stores"] = MerchantDao::listStores(merchantId);
     m["services"] = MerchantDao::listServices(merchantId, "on");
-    m["packages"] = MerchantDao::listPackages(merchantId, "on");
+    m["packages"] = MerchantDao::withPackageItems(MerchantDao::listPackages(merchantId, "on"),
+                                                  merchantId);
     // 每个门店的在售数量 + 每个项目「在售门店」映射（详情页据此引导到具体门店下单）
     nlohmann::json serviceStores = nlohmann::json::object();
     nlohmann::json packageStores = nlohmann::json::object();
@@ -109,8 +111,9 @@ nlohmann::json SearchService::storeDetail(long long storeId, long long viewerId,
                        {"review_count", m.value("review_count", 0LL)}};
     // 本门店在售项目（由门店决定是否运营）
     out["services"] = MerchantDao::listStoreServices(storeId);
-    out["packages"] = MerchantDao::listStorePackages(storeId);
-    out["coupons"] = MerchantDao::listStoreCoupons(storeId);
+    out["packages"] = MerchantDao::withPackageItems(MerchantDao::listStorePackages(storeId),
+                                                    merchantId);
+    out["coupons"] = CouponDao::withTargets(MerchantDao::listStoreCoupons(storeId), merchantId);
     // 门店维度口碑汇总
     out["summary"] = ReviewDao::targetSummary("store", storeId);
     out["favorite_count"] = InteractionDao::countFavorites("merchant", merchantId);

@@ -1,7 +1,9 @@
 #include "controller/OrderController.h"
 
+#include "dao/MerchantDao.h"
 #include "model/Models.h"
 #include "server/Api.h"
+#include "service/CouponService.h"
 #include "service/OrderService.h"
 #include "util/Json.h"
 
@@ -42,17 +44,53 @@ void OrderController::registerRoutes(httplib::Server& svr) {
         }, res);
     });
 
-    // POST /api/store/{id}/order 在指定门店下单（item_type: service / package）
+    // POST /api/store/{id}/order 在指定门店下单（item_type: service / package；coupon_claim_id 可选）
     svr.Post(R"(/api/store/(\d+)/order)", [](const httplib::Request& req, httplib::Response& res) {
         guard([&] {
             needLogin(req, res, "consumer", [&](const api::AuthCtx& ctx) {
                 auto body = parseBody(req);
                 sendOk(res, OrderService::buyAtStore(ctx.userId, std::stoll(req.matches[1].str()),
                                                      jsonStr(body, "item_type"),
-                                                     jsonInt(body, "item_id")));
+                                                     jsonInt(body, "item_id"),
+                                                     jsonInt(body, "coupon_claim_id")));
             });
         }, res);
     });
+
+    // GET /api/store/{id}/coupons/usable 该门店某项目可用的优惠券（消费者）
+    svr.Get(R"(/api/store/(\d+)/coupons/usable)",
+            [](const httplib::Request& req, httplib::Response& res) {
+                guard([&] {
+                    needLogin(req, res, "consumer", [&](const api::AuthCtx& ctx) {
+                        std::string itemType = req.get_param_value("item_type");
+                        long long itemId = 0;
+                        try {
+                            itemId = std::stoll(req.get_param_value("item_id"));
+                        } catch (...) {
+                            throw BizError(resp::PARAM_ERROR, "缺少 item_id");
+                        }
+                        double amt = 0;
+                        try {
+                            amt = std::stod(req.get_param_value("amount"));
+                        } catch (...) {
+                            amt = 0;
+                        }
+                        // 未显式传金额时，按项目原价计算
+                        if (amt <= 0) {
+                            if (itemType == "package") {
+                                auto p = MerchantDao::packageById(itemId);
+                                if (!p.is_null()) amt = p.value("price", 0.0);
+                            } else {
+                                auto s = MerchantDao::serviceById(itemId);
+                                if (!s.is_null()) amt = s.value("price", 0.0);
+                            }
+                        }
+                        sendOk(res, CouponService::usableFor(ctx.userId,
+                                                             std::stoll(req.matches[1].str()),
+                                                             itemType, itemId, amt));
+                    });
+                }, res);
+            });
 
     // 我的订单（?status=purchased/used/refunded/all）
     svr.Get("/api/my/orders", [](const httplib::Request& req, httplib::Response& res) {

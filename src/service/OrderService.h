@@ -6,9 +6,10 @@
 
 class OrderService {
 public:
-    // 消费者在指定门店下单（item_type: service / package）
+    // 消费者在指定门店下单（item_type: service / package；couponClaimId 可选：使用我的卡券）
     static nlohmann::json buyAtStore(long long userId, long long storeId,
-                                     const std::string& itemType, long long itemId);
+                                     const std::string& itemType, long long itemId,
+                                     long long couponClaimId = 0);
     // 兼容旧接口：按套餐下单（自动选取在售该套餐的门店）
     static nlohmann::json buy(long long userId, long long packageId);
 

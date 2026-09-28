@@ -42,6 +42,13 @@ long long addPackage(long long merchantId, const nlohmann::json& p);
 void updatePackage(long long id, const nlohmann::json& p);
 bool updatePackageStatus(long long id, const std::string& status);
 
+// ---- 套餐 × 服务项目（套餐由一个或多个服务项目组成，可含数量）----
+// 全量覆盖套餐包含的服务项目：items = [{service_id, quantity}]
+void setPackageItems(long long packageId, const nlohmann::json& items);
+nlohmann::json listPackageItems(long long packageId);  // [{service_id, name, price, price_unit, quantity}]
+// 给套餐列表补充 items / items_text / origin_price（一次查询，避免 N+1）
+nlohmann::json withPackageItems(const nlohmann::json& packages, long long merchantId);
+
 // ---- 门店经营项目上架关系（itemKind: service / package / coupon）----
 // 门店维度：列出该商户全部项目 + 本门店上架状态（未建关系视为未上架）
 nlohmann::json storeOfferings(long long storeId, long long merchantId);

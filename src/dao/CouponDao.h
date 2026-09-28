@@ -14,6 +14,20 @@ nlohmann::json listByMerchant(long long merchantId);
 nlohmann::json listPublished(long long merchantId);  // 正在生效可领（时间窗内）
 bool updateStatus(long long id, const std::string& status);
 
+// ---- 优惠活动适用对象（为空 = 全场通用）----
+// targets = [{target_type: 'service'|'package', target_id}]
+void setTargets(long long couponId, const nlohmann::json& targets);
+nlohmann::json listTargets(long long couponId);   // [{target_type,target_id,name}]
+// 给券列表补充 targets / targets_text / scope_desc（一次查询，避免 N+1）
+nlohmann::json withTargets(const nlohmann::json& coupons, long long merchantId);
+// 判断券是否适用于某项目（无任何绑定 → 全场通用）
+bool isApplicable(long long couponId, const std::string& itemType, long long itemId);
+// 我的卡券记录（含券模板信息）
+nlohmann::json claimById(long long claimId);
+// 下单占用 / 退款归还
+bool markClaimUsed(long long claimId);
+bool releaseClaim(long long claimId);
+
 // 领取：防超发 + 幂等（同一用户对同一活动限领一张）
 int tryReceive(long long couponId, long long userId);
 bool alreadyClaimed(long long couponId, long long userId);
