@@ -133,17 +133,51 @@ async function renderOverview(main) {
 async function renderConsumption(main) {
   main.innerHTML = '<div class="panel mb-3"><h5><i class="bi bi-receipt-cutoff"></i> 记一笔到店消费</h5>' +
     '<form id="consForm" class="row g-3 align-items-end">' +
-    '<div class="col-md-5"><label class="form-label">商户</label><select name="merchant_id" class="form-select" id="consMerchant"></select></div>' +
-    '<div class="col-md-3"><label class="form-label">金额（元）</label><input class="form-control" name="amount" type="number" min="1" step="0.01" required></div>' +
-    '<div class="col-md-3"><label class="form-label">消费时间</label><input class="form-control" name="consume_time" type="date"></div>' +
-    '<div class="col-md-1"><button class="btn btn-main w-100"><i class="bi bi-plus-lg"></i></button></div></form></div>' +
+    '<div class="col-md-4"><label class="form-label">商户 *</label><select name="merchant_id" class="form-select" id="consMerchant"></select></div>' +
+    '<div class="col-md-4"><label class="form-label">项目（可选）</label><select name="item" class="form-select" id="consItem"><option value="">不指定项目</option></select></div>' +
+    '<div class="col-md-2"><label class="form-label">金额（元）*</label><input class="form-control" name="amount" type="number" min="1" step="0.01" required></div>' +
+    '<div class="col-md-2"><label class="form-label">消费时间</label><input class="form-control" name="consume_time" type="date"></div>' +
+    '<div class="col-12"><button class="btn btn-main" type="submit"><i class="bi bi-plus-lg"></i> 记一笔</button>' +
+    '<span class="text-muted ms-2" style="font-size:12.5px">项目为该商户的招牌服务 / 优惠套餐，选择后自动带出价格；也可留空只记金额</span></div></form></div>' +
     '<div class="table-card"><div class="t-head"><h5>消费账单</h5></div><div id="consBody" class="p-3">加载中…</div></div>';
-  // 商户下拉（已上架商户）
+  // 商户下拉（已上架商户）+ 项目下拉（随商户联动）
+  const selM = main.querySelector("#consMerchant");
+  const selI = main.querySelector("#consItem");
+  const amtInput = main.querySelector("#consForm input[name=amount]");
+  const loadItems = async () => {
+    const mid = Number(selM.value);
+    selI.innerHTML = '<option value="">不指定项目</option>';
+    if (!mid) return;
+    try {
+      const d = await LL.api("GET", "/api/merchants/" + mid);
+      const svcs = d.services || [], pkgs = d.packages || [];
+      let html = '<option value="">不指定项目</option>';
+      if (svcs.length) {
+        html += '<optgroup label="招牌服务">' + svcs.map(s =>
+          '<option value="service:' + s.id + '" data-price="' + s.price + '">' +
+          LL.esc(s.name) + "（¥" + LL.money(s.price) + "）</option>").join("") + "</optgroup>";
+      }
+      if (pkgs.length) {
+        html += '<optgroup label="优惠套餐">' + pkgs.map(p =>
+          '<option value="package:' + p.id + '" data-price="' + p.price + '">' +
+          LL.esc(p.name) + (p.items_text ? "（含 " + LL.esc(p.items_text) + "）" : "") +
+          "（¥" + LL.money(p.price) + "）</option>").join("") + "</optgroup>";
+      }
+      selI.innerHTML = html;
+    } catch (e) { /* 商户详情加载失败时保持空列表 */ }
+  };
   try {
     const m = await LL.api("GET", "/api/search?page=1&size=100");
-    const sel = main.querySelector("#consMerchant");
-    sel.innerHTML = m.list.map(x => '<option value="' + x.id + '">' + LL.esc(x.name) + "</option>").join("") || '<option value="">暂无商户</option>';
+    selM.innerHTML = m.list.map(x => '<option value="' + x.id + '">' + LL.esc(x.name) + "</option>").join("")
+      || '<option value="">暂无商户</option>';
   } catch (e) {}
+  await loadItems();
+  selM.addEventListener("change", () => { selI.value = ""; loadItems(); });
+  selI.addEventListener("change", () => {
+    const opt = selI.selectedOptions[0];
+    const price = opt && opt.dataset ? opt.dataset.price : "";
+    if (price && !amtInput.value) amtInput.value = price;   // 自动带出项目价格
+  });
 
   const body = main.querySelector("#consBody");
   const load = async () => {
@@ -151,20 +185,35 @@ async function renderConsumption(main) {
       const r = await LL.api("GET", "/api/my/consumptions?page=1&size=50");
       if (!r.total) { body.innerHTML = emptyBox("还没有消费记录，去店里消费后记一笔吧"); return; }
       body.innerHTML = '<table class="table"><thead><tr><th>商户</th><th>项目</th><th>金额</th><th>消费时间</th></tr></thead><tbody>' +
-        r.list.map(c => "<tr><td>" + LL.esc(c.merchant_name) + "</td><td>" +
-          LL.esc(c.service_name || c.package_name || "—") + "</td><td class='price-min'>" + LL.money(c.amount) +
-          "</td><td>" + LL.esc(String(c.consume_time || "").slice(0, 16)) + "</td></tr>").join("") + "</tbody></table>";
+        r.list.map(c => {
+          const tag = c.service_name
+            ? '<span class="badge-soft badge-pending">服务</span> '
+            : (c.package_name ? '<span class="badge-soft badge-approved">套餐</span> ' : "");
+          return "<tr><td>" + LL.esc(c.merchant_name) + "</td><td>" + tag +
+            LL.esc(c.service_name || c.package_name || "—") + "</td><td class='price-min'>" + LL.money(c.amount) +
+            "</td><td>" + LL.esc(String(c.consume_time || "").slice(0, 16)) + "</td></tr>";
+        }).join("") + "</tbody></table>";
     } catch (e) { body.innerHTML = '<div class="empty">' + LL.esc(e.message) + "</div>"; }
   };
   main.querySelector("#consForm").addEventListener("submit", async e => {
     e.preventDefault(); const f = e.target;
+    const parts = (f.item.value || ":").split(":");
+    const itemType = parts[0], itemId = Number(parts[1]) || 0;
     try {
       await LL.api("POST", "/api/consume", {
-        merchant_id: Number(f.merchant_id.value), amount: Number(f.amount.value),
-        consume_time: f.consume_time.value ? f.consume_time.value + " 12:00:00" : ""
+        merchant_id: Number(f.merchant_id.value),
+        amount: Number(f.amount.value),
+        consume_time: f.consume_time.value ? f.consume_time.value + " 12:00:00" : "",
+        service_id: itemType === "service" ? itemId : 0,
+        package_id: itemType === "package" ? itemId : 0
       });
       LL.toast("记账成功", "ok");
-      f.reset();
+      // 保留当前商户（避免 reset 把商户重置回第一项导致与项目错位）
+      if (f.amount) f.amount.value = "";
+      if (f.consume_time) f.consume_time.value = "";
+      if (f.item) f.item.value = "";
+      amtInput.value = "";
+      await loadItems();
       await load();
     } catch (err) { LL.toast(err.message, "err"); }
   });

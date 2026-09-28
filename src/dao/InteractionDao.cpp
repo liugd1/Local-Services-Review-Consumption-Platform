@@ -115,12 +115,15 @@ nlohmann::json listHistory(long long userId, int limit) {
 // ---------------- 消费记录 ----------------
 bool addConsumption(long long userId, const nlohmann::json& rec) {
     auto& db = Database::instance();
-    std::string svcId = jsonStr(rec, "service_id");
-    std::string pkgId = jsonStr(rec, "package_id");
+    // 注意：前端传的是数字型 id，需用 jsonInt 读取（jsonStr 只识别字符串）
+    long long svcNum = jsonInt(rec, "service_id");
+    long long pkgNum = jsonInt(rec, "package_id");
+    std::string svcId = svcNum > 0 ? std::to_string(svcNum) : "";
+    std::string pkgId = pkgNum > 0 ? std::to_string(pkgNum) : "";
     std::string now = timeutil::nowStr();
     std::string consumeTime = jsonStr(rec, "consume_time");
     if (consumeTime.empty()) consumeTime = now;
-    std::string merchantId = jsonStr(rec, "merchant_id");
+    std::string merchantId = std::to_string(jsonInt(rec, "merchant_id"));
     std::string amount = std::to_string(jsonNum(rec, "amount"));
 
     long affected;
