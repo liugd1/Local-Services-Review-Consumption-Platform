@@ -52,12 +52,16 @@ nlohmann::json OrderService::buyAtStore(long long userId, long long storeId,
         item = MerchantDao::serviceById(itemId);
         if (item.is_null() || item.value("merchant_id", 0LL) != store.value("merchant_id", 0LL))
             throw BizError(resp::NOT_FOUND, "服务项目不存在或不属于该门店的店铺");
+        if (!jsonStr(item, "deleted_at").empty())
+            throw BizError(resp::NOT_FOUND, "该服务项目已被删除");
         if (jsonStr(item, "status") != "on")
             throw BizError(resp::CONFLICT, "该服务项目已下架");
     } else {
         item = MerchantDao::packageById(itemId);
         if (item.is_null() || item.value("merchant_id", 0LL) != store.value("merchant_id", 0LL))
             throw BizError(resp::NOT_FOUND, "优惠套餐不存在或不属于该门店的店铺");
+        if (!jsonStr(item, "deleted_at").empty())
+            throw BizError(resp::NOT_FOUND, "该优惠套餐已被删除");
         if (jsonStr(item, "status") != "on")
             throw BizError(resp::CONFLICT, "该优惠套餐已下架");
     }
@@ -145,6 +149,17 @@ void OrderService::useOrder(long long userId, long long orderId) {
         OrderDao::writeConsumption(userId, merchantId, storeId, 0, idOrZero(o, "package_id"),
                                    o.value("amount", 0.0));
     }
+}
+
+// 删除订单：待使用(purchased)的订单不允许删除（属于未使用且仍可正常使用的权益）
+void OrderService::deleteOrder(long long userId, long long orderId) {
+    auto o = OrderDao::orderById(orderId);
+    if (o.is_null() || o.value("user_id", 0LL) != userId)
+        throw BizError(resp::NOT_FOUND, "订单不存在或不属于你");
+    if (jsonStr(o, "status") == "purchased")
+        throw BizError(resp::CONFLICT, "该订单尚未使用（可正常核销或退款），不能删除");
+    if (!OrderDao::softDeleteOrder(orderId))
+        throw BizError(resp::CONFLICT, "删除失败，订单可能已被删除");
 }
 
 void OrderService::refundOrder(long long userId, long long orderId) {

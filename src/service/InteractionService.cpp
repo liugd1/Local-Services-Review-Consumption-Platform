@@ -84,6 +84,12 @@ void InteractionService::addConsumption(long long userId, const nlohmann::json& 
         throw BizError(resp::SERVER_ERROR, "保存消费记录失败");
 }
 
+// 删除消费记录（软删除：前端不再展示，数据库保留）
+void InteractionService::deleteConsumption(long long userId, long long id) {
+    if (!InteractionDao::softDeleteConsumption(id, userId))
+        throw BizError(resp::NOT_FOUND, "消费记录不存在或已被删除");
+}
+
 nlohmann::json InteractionService::listConsumptions(long long userId, int page, int size) {
     if (page < 1) page = 1;
     if (size < 1 || size > 100) size = 20;

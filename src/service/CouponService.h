@@ -25,4 +25,9 @@ public:
     // item_type: service / package
     static nlohmann::json usableFor(long long userId, long long storeId, const std::string& itemType,
                                     long long itemId, double amount);
+
+    // 删除卡券（软删除；未使用且在有效期内、可正常使用的券不允许删除）
+    static void deleteClaim(long long userId, long long claimId);
+    // 删除优惠活动（商户软删除；前端不再展示，数据库保留）
+    static void deleteCoupon(long long merchantUserId, long long couponId);
 };

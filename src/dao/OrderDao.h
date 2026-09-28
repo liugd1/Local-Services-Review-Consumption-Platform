@@ -20,6 +20,8 @@ nlohmann::json listByUser(long long userId, const std::string& status, int page,
 bool markUsed(long long orderId, long long userId);
 // 退款：purchased -> refunded
 bool markRefunded(long long orderId, long long userId);
+// 软删除：消费者从前端删除订单（数据保留）
+bool softDeleteOrder(long long orderId);
 // 生成联动消费记录（服务或套餐二选一，另一项写 NULL）
 bool writeConsumption(long long userId, long long merchantId, long long storeId,
                       long long serviceId, long long packageId, double amount);

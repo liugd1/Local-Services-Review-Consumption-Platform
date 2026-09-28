@@ -34,6 +34,8 @@ nlohmann::json serviceById(long long id);  // 行对象（含 merchant_id 供归
 long long addService(long long merchantId, const nlohmann::json& s);
 void updateService(long long id, const nlohmann::json& s);
 bool updateServiceStatus(long long id, const std::string& status);
+// 软删除（前端不再展示，数据保留）
+bool softDeleteService(long long id);
 
 // ---- 消费套餐 ----
 nlohmann::json listPackages(long long merchantId, const std::string& status = "");
@@ -41,6 +43,8 @@ nlohmann::json packageById(long long id);
 long long addPackage(long long merchantId, const nlohmann::json& p);
 void updatePackage(long long id, const nlohmann::json& p);
 bool updatePackageStatus(long long id, const std::string& status);
+// 软删除（前端不再展示，数据保留）
+bool softDeletePackage(long long id);
 
 // ---- 套餐 × 服务项目（套餐由一个或多个服务项目组成，可含数量）----
 // 全量覆盖套餐包含的服务项目：items = [{service_id, quantity}]

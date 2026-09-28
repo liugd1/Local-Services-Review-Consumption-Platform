@@ -152,6 +152,18 @@ build/locallife.exe          # Windows
 - 相关接口：`GET /api/store/{id}/coupons/usable?item_type=&item_id=`（可用券）、
   `POST /api/store/{id}/order`（body 增加可选 `coupon_claim_id`）。
 
+### 4.7 记录删除（软删除：前端不展示，数据库保留）
+
+- **消费者可删除自己的**：消费记录、我的卡券、我的订单；
+  **掌柜可删除自己的**：服务项目、优惠套餐、优惠活动。
+- **保护规则**（未使用且仍可正常使用的权益不允许删除）：
+  - 卡券：`未使用 且在有效期内` → **不可删除**（已核销 / 已过期可删）；
+  - 订单：`待使用(purchased)` → **不可删除**（已使用 / 已退款可删，前端删除按钮为禁用态并给出说明）；
+  - 消费记录：可随时删除；服务项目/套餐/活动：掌柜可随时删除。
+- **实现方式：软删除**（`deleted_at` 标记）——删除后列表、详情、可下单项目、门店在售项目等都不再返回该记录，
+  但**数据库行完整保留**（`deleted_at` 记录删除时间），可通过 SQL 直接查回；
+  已软删除的服务/套餐不可再下单，已软删除的活动不可再领取与核销。
+
 ### 4.6 图文描述（店铺 / 门店 / 服务 / 套餐）
 
 - 店铺主可在掌柜台为四类对象上传**一张或多张图片**（jpg / png / gif / webp，单张 ≤8MB，多图逗号分隔存储）：
@@ -321,8 +333,8 @@ Local-Services-Review-Consumption-Platform/
 
 | 说明 | 方法与路径 |
 | --- | --- |
-| 领取优惠券 | `POST /api/coupon/{id}/receive` |
-| 我的卡券 | `GET /api/my/coupons?status=unused|used|all` |
+| 优惠券与卡券 | `POST /api/coupon/{id}/receive`、`GET /api/my/coupons`、`DELETE /api/my/coupon/{claimId}`（已核销/已过期可删） |
+| 记录删除（软删除） | `DELETE /api/my/consumption/{id}`、`DELETE /api/my/order/{id}`、`DELETE /api/merchant/services/{id}`、`DELETE /api/merchant/packages/{id}`、`DELETE /api/merchant/coupons/{id}` |
 | **门店下单（服务 / 套餐）** | `POST /api/store/{id}/order`（body：`item_type=service\|package`、`item_id`） |
 | 购买套餐（兼容旧接口） | `POST /api/package/{id}/buy`（自动选取在售该套餐的门店） |
 | 我的订单 | `GET /api/my/orders?status=purchased|used|refunded|all&page=&size=` |

@@ -122,4 +122,14 @@ void OrderController::registerRoutes(httplib::Server& svr) {
             });
         }, res);
     });
+
+    // 删除订单（软删除；待使用订单不允许删除）
+    svr.Delete(R"(/api/my/order/(\d+))", [](const httplib::Request& req, httplib::Response& res) {
+        guard([&] {
+            needLogin(req, res, "consumer", [&](const api::AuthCtx& ctx) {
+                OrderService::deleteOrder(ctx.userId, std::stoll(req.matches[1].str()));
+                sendOk(res);
+            });
+        }, res);
+    });
 }

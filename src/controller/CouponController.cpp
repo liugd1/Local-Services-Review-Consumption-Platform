@@ -84,6 +84,27 @@ void CouponController::registerRoutes(httplib::Server& svr) {
         }, res);
     });
 
+    // 消费者删除自己的卡券（软删除；未使用且在有效期内的券不允许删除）
+    svr.Delete(R"(/api/my/coupon/(\d+))", [](const httplib::Request& req, httplib::Response& res) {
+        guard([&] {
+            needLogin(req, res, "consumer", [&](const api::AuthCtx& ctx) {
+                CouponService::deleteClaim(ctx.userId, std::stoll(req.matches[1].str()));
+                sendOk(res);
+            });
+        }, res);
+    });
+
+    // 商户删除优惠活动（软删除：列表不再展示，数据库保留）
+    svr.Delete(R"(/api/merchant/coupons/(\d+))", [](const httplib::Request& req,
+                                                    httplib::Response& res) {
+        guard([&] {
+            needLogin(req, res, "merchant", [&](const api::AuthCtx& ctx) {
+                CouponService::deleteCoupon(ctx.userId, std::stoll(req.matches[1].str()));
+                sendOk(res);
+            });
+        }, res);
+    });
+
     // 我的卡券（?status=unused/used/all）
     svr.Get("/api/my/coupons", [](const httplib::Request& req, httplib::Response& res) {
         guard([&] {

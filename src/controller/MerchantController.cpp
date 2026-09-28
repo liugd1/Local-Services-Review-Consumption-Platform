@@ -38,6 +38,28 @@ void MerchantController::registerRoutes(httplib::Server& svr) {
         }, res);
     });
 
+    // DELETE /api/merchant/services/{id} 删除服务项目（软删除，前端不再展示）
+    svr.Delete(R"(/api/merchant/services/(\d+))", [](const httplib::Request& req,
+                                                     httplib::Response& res) {
+        guard([&] {
+            auto ctx = api::authenticate(req);
+            if (!requireRole(ctx, "merchant", res)) return;
+            MerchantService::deleteService(ctx->userId, std::stoll(req.matches[1].str()));
+            sendOk(res);
+        }, res);
+    });
+
+    // DELETE /api/merchant/packages/{id} 删除优惠套餐（软删除，前端不再展示）
+    svr.Delete(R"(/api/merchant/packages/(\d+))", [](const httplib::Request& req,
+                                                     httplib::Response& res) {
+        guard([&] {
+            auto ctx = api::authenticate(req);
+            if (!requireRole(ctx, "merchant", res)) return;
+            MerchantService::deletePackage(ctx->userId, std::stoll(req.matches[1].str()));
+            sendOk(res);
+        }, res);
+    });
+
     // ---- 门店 ----
     // 门店经营项目：全部服务/套餐/活动 + 本店上架状态（由门店决定是否运营）
     svr.Get(R"(/api/merchant/stores/(\d+)/offerings)",

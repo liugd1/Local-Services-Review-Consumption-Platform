@@ -184,15 +184,24 @@ async function renderConsumption(main) {
     try {
       const r = await LL.api("GET", "/api/my/consumptions?page=1&size=50");
       if (!r.total) { body.innerHTML = emptyBox("还没有消费记录，去店里消费后记一笔吧"); return; }
-      body.innerHTML = '<table class="table"><thead><tr><th>商户</th><th>项目</th><th>金额</th><th>消费时间</th></tr></thead><tbody>' +
+      body.innerHTML = '<table class="table"><thead><tr><th>商户</th><th>项目</th><th>金额</th><th>消费时间</th><th style="width:90px">操作</th></tr></thead><tbody>' +
         r.list.map(c => {
           const tag = c.service_name
             ? '<span class="badge-soft badge-pending">服务</span> '
             : (c.package_name ? '<span class="badge-soft badge-approved">套餐</span> ' : "");
           return "<tr><td>" + LL.esc(c.merchant_name) + "</td><td>" + tag +
             LL.esc(c.service_name || c.package_name || "—") + "</td><td class='price-min'>" + LL.money(c.amount) +
-            "</td><td>" + LL.esc(String(c.consume_time || "").slice(0, 16)) + "</td></tr>";
+            "</td><td>" + LL.esc(String(c.consume_time || "").slice(0, 16)) +
+            '</td><td><button class="btn btn-ghost btn-sm text-danger" data-del-cons="' + c.id + '">删除</button></td></tr>';
         }).join("") + "</tbody></table>";
+      body.querySelectorAll("[data-del-cons]").forEach(b => b.addEventListener("click", async () => {
+        if (!confirm("删除这条消费记录？（数据库中仍会保留，仅不再显示）")) return;
+        try {
+          await LL.api("DELETE", "/api/my/consumption/" + b.dataset.delCons);
+          LL.toast("已删除", "ok");
+          await load();
+        } catch (e) { LL.toast(e.message, "err"); }
+      }));
     } catch (e) { body.innerHTML = '<div class="empty">' + LL.esc(e.message) + "</div>"; }
   };
   main.querySelector("#consForm").addEventListener("submit", async e => {
@@ -238,6 +247,7 @@ async function renderMyCoupons(main) {
     '<button class="cat-chip" data-s="unused">未使用</button>' +
     '<button class="cat-chip" data-s="used">已使用</button></div></div><div class="p-3" id="cpnBody"></div></div>';
   const body = main.querySelector("#cpnBody");
+  let filter = "";
   const load = async () => {
     body.innerHTML = "加载中…";
     try {
@@ -262,13 +272,25 @@ async function renderMyCoupons(main) {
           " · 有效期至 " + LL.esc(String(r.end_time || "").slice(0, 10)) + "</div>" +
           '<div class="mt-1"><code style="font-size:13px;letter-spacing:2px">' + LL.esc(r.code) + "</code>" +
           '<span class="text-muted small ms-2">到店向商家出示核销码</span></div></div>' +
-          (cs === "used" ? '<div class="text-muted" style="font-size:12px;white-space:nowrap">已核销 ' +
-            LL.esc(String(r.used_time || "").slice(0, 16)) + "</div>" : "") +
-          "</div></div>";
+          '<div class="text-end" style="white-space:nowrap">' +
+          (cs === "unused"
+            ? '<button class="btn btn-ghost btn-sm" disabled title="券仍可使用，不能删除">删除</button>' +
+              '<div class="text-muted" style="font-size:11px">未使用·有效</div>'
+            : '<button class="btn btn-ghost btn-sm text-danger" data-del-coupon="' + r.claim_id + '">删除</button>' +
+              (cs === "used" ? '<div class="text-muted" style="font-size:11px">已核销 ' +
+                LL.esc(String(r.used_time || "").slice(0, 16)) + "</div>" : "")) +
+          "</div></div></div>";
       }).join("");
     } catch (e) { body.innerHTML = '<div class="empty">' + LL.esc(e.message) + "</div>"; }
+    body.querySelectorAll("[data-del-coupon]").forEach(b => b.addEventListener("click", async () => {
+      if (!confirm("删除这张卡券？（数据库中仍会保留，仅不再显示）")) return;
+      try {
+        await LL.api("DELETE", "/api/my/coupon/" + b.dataset.delCoupon);
+        LL.toast("已删除", "ok");
+        await load();
+      } catch (e) { LL.toast(e.message, "err"); }
+    }));
   };
-  let filter = "";
   main.querySelectorAll("[data-s]").forEach(b => b.addEventListener("click", () => {
     filter = b.dataset.s;
     main.querySelectorAll("[data-s]").forEach(x => x.classList.remove("on"));
@@ -291,8 +313,9 @@ async function renderMyOrders(main) {
         d.list.map(o => {
           const acts = o.status === "purchased"
             ? '<button class="btn btn-main btn-sm" data-use="' + o.id + '">去使用</button> ' +
-              '<button class="btn btn-ghost btn-sm" data-ref="' + o.id + '">退款</button>'
-            : '<span class="text-muted small">—</span>';
+              '<button class="btn btn-ghost btn-sm" data-ref="' + o.id + '">退款</button> ' +
+              '<button class="btn btn-ghost btn-sm" disabled title="待使用订单可正常核销或退款，不能删除">删除</button>'
+            : '<button class="btn btn-ghost btn-sm text-danger" data-del-order="' + o.id + '">删除</button>';
           const typeTag = o.item_type === "service"
             ? '<span class="badge-soft badge-pending">服务</span>'
             : '<span class="badge-soft badge-approved">套餐</span>';
@@ -322,6 +345,11 @@ async function renderMyOrders(main) {
       body.querySelectorAll("[data-ref]").forEach(b => b.addEventListener("click", async () => {
         if (!confirm("确认申请退款？")) return;
         try { await LL.api("POST", "/api/order/" + b.dataset.ref + "/refund"); LL.toast("已退款", "ok"); await load(); }
+        catch (e) { LL.toast(e.message, "err"); }
+      }));
+      body.querySelectorAll("[data-del-order]").forEach(b => b.addEventListener("click", async () => {
+        if (!confirm("删除这条订单？（数据库中仍会保留，仅不再显示）")) return;
+        try { await LL.api("DELETE", "/api/my/order/" + b.dataset.delOrder); LL.toast("已删除", "ok"); await load(); }
         catch (e) { LL.toast(e.message, "err"); }
       }));
     } catch (e) { body.innerHTML = '<div class="empty">' + LL.esc(e.message) + "</div>"; }

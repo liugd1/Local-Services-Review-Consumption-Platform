@@ -15,6 +15,8 @@ public:
 
     static void useOrder(long long userId, long long orderId);
     static void refundOrder(long long userId, long long orderId);
+    // 删除订单（软删除；待使用(purchased)的订单不允许删除）
+    static void deleteOrder(long long userId, long long orderId);
     static nlohmann::json myOrders(long long userId, const std::string& status, int page,
                                    int size);
 };

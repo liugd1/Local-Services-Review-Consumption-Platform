@@ -22,4 +22,6 @@ public:
     // ---- 消费记录 ----
     static void addConsumption(long long userId, const nlohmann::json& body);
     static nlohmann::json listConsumptions(long long userId, int page, int size);
+    // 删除消费记录（软删除：前端不再展示，数据库保留）
+    static void deleteConsumption(long long userId, long long id);
 };

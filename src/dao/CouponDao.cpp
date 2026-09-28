@@ -57,7 +57,7 @@ nlohmann::json listByMerchant(long long merchantId) {
     return Database::instance().query(
         "SELECT c.*, m.name AS merchant_name FROM coupons c "
         "JOIN merchants m ON m.id = c.merchant_id "
-        "WHERE c.merchant_id = ? ORDER BY c.id DESC",
+        "WHERE c.merchant_id = ? AND c.deleted_at IS NULL ORDER BY c.id DESC",
         {std::to_string(merchantId)});
 }
 
@@ -67,7 +67,7 @@ nlohmann::json listPublished(long long merchantId) {
         "SELECT c.*, m.name AS merchant_name FROM coupons c "
         "JOIN merchants m ON m.id = c.merchant_id "
         "WHERE c.merchant_id = ? AND c.status = 'published' AND c.start_time <= ? "
-        "AND c.end_time >= ? ORDER BY c.id DESC",
+        "AND c.end_time >= ? AND c.deleted_at IS NULL ORDER BY c.id DESC",
         {std::to_string(merchantId), now, now});
 }
 
@@ -248,7 +248,7 @@ nlohmann::json listUserClaims(long long userId, const std::string& status) {
             "c.discount_rate, c.start_time, c.end_time, c.status AS coupon_status, "
             "c.merchant_id, m.name AS merchant_name FROM coupon_user cu "
             "JOIN coupons c ON c.id = cu.coupon_id JOIN merchants m ON m.id = c.merchant_id "
-            "WHERE cu.user_id = ? ORDER BY cu.id DESC",
+            "WHERE cu.user_id = ? AND cu.deleted_at IS NULL ORDER BY cu.id DESC",
             {std::to_string(userId)});
     }
     return db.query(
@@ -257,8 +257,20 @@ nlohmann::json listUserClaims(long long userId, const std::string& status) {
         "c.discount_rate, c.start_time, c.end_time, c.status AS coupon_status, "
         "c.merchant_id, m.name AS merchant_name FROM coupon_user cu "
         "JOIN coupons c ON c.id = cu.coupon_id JOIN merchants m ON m.id = c.merchant_id "
-        "WHERE cu.user_id = ? AND cu.status = ? ORDER BY cu.id DESC",
+        "WHERE cu.user_id = ? AND cu.status = ? AND cu.deleted_at IS NULL ORDER BY cu.id DESC",
         {std::to_string(userId), status});
+}
+
+bool softDeleteClaim(long long claimId) {
+    return Database::instance().execute(
+               "UPDATE coupon_user SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL",
+               {timeutil::nowStr(), std::to_string(claimId)}) == 1;
+}
+
+bool softDeleteCoupon(long long couponId) {
+    return Database::instance().execute(
+               "UPDATE coupons SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL",
+               {timeutil::nowStr(), std::to_string(couponId)}) == 1;
 }
 
 nlohmann::json claimByUserAndCoupon(long long couponId, long long userId) {

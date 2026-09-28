@@ -262,7 +262,8 @@ async function shopServices(main, data) {
       "</td><td class='text-muted' style='font-size:12px'>" + LL.esc(s.applicable_time || "不限") + (s.store_name ? " · " + LL.esc(s.store_name) : "") + "</td><td>" + badge(s.status) +
       '</td><td><div class="btn-group btn-group-sm">' +
       '<button class="btn btn-ghost" data-edit="' + s.id + '">编辑</button>' +
-      '<button class="btn btn-ghost" data-status="' + s.id + '" data-cur="' + s.status + '">' + (s.status === "on" ? "下架" : "上架") + "</button></div></td></tr>").join("") ||
+      '<button class="btn btn-ghost" data-status="' + s.id + '" data-cur="' + s.status + '">' + (s.status === "on" ? "下架" : "上架") + '</button>' +
+      '<button class="btn btn-ghost text-danger" data-del="' + s.id + '">删除</button></div></td></tr>').join("") ||
       '<tr><td colspan="5">' + emptyBox("还没有服务项目") + "</td></tr>") +
     "</tbody></table></div>" +
     '<div class="panel mt-3" id="svcFormBox" style="display:none"><h5 id="svcFormTitle">新增服务</h5>' +
@@ -299,6 +300,13 @@ async function shopServices(main, data) {
       LL.toast("已更新", "ok"); location.reload();
     } catch (e) { LL.toast(e.message, "err"); }
   }));
+  main.querySelectorAll("[data-del]").forEach(b => b.addEventListener("click", async () => {
+    if (!confirm("删除该服务项目？（数据库中仍会保留，前端不再显示）")) return;
+    try {
+      await LL.api("DELETE", "/api/merchant/services/" + b.dataset.del);
+      LL.toast("已删除", "ok"); location.reload();
+    } catch (e) { LL.toast(e.message, "err"); }
+  }));
   main.querySelector("#svcForm").addEventListener("submit", async e => {
     e.preventDefault(); const f = e.target;
     const body = { name: f.name.value.trim(), price: Number(f.price.value), price_unit: f.price_unit.value.trim(),
@@ -329,7 +337,8 @@ async function shopPackages(main, data) {
       "</td><td class='price-min'>" + LL.money(p.price) + "</td><td>" + badge(p.status) +
       '</td><td><div class="btn-group btn-group-sm">' +
       '<button class="btn btn-ghost" data-edit="' + p.id + '">编辑</button>' +
-      '<button class="btn btn-ghost" data-status="' + p.id + '" data-cur="' + p.status + '">' + (p.status === "on" ? "下架" : "上架") + "</button></div></td></tr>").join("") ||
+      '<button class="btn btn-ghost" data-status="' + p.id + '" data-cur="' + p.status + '">' + (p.status === "on" ? "下架" : "上架") + '</button>' +
+      '<button class="btn btn-ghost text-danger" data-del="' + p.id + '">删除</button></div></td></tr>').join("") ||
       '<tr><td colspan="5">' + emptyBox("还没有套餐，加一个招牌套餐吧") + "</td></tr>") +
     "</tbody></table></div>" +
     '<div class="panel mt-3" id="pkgFormBox" style="display:none"><h5 id="pkgFormTitle">新增套餐</h5>' +
@@ -392,6 +401,13 @@ async function shopPackages(main, data) {
     try {
       await LL.api("PUT", "/api/merchant/packages/" + b.dataset.status + "/status", { status: b.dataset.cur === "on" ? "off" : "on" });
       LL.toast("已更新", "ok"); location.reload();
+    } catch (e) { LL.toast(e.message, "err"); }
+  }));
+  main.querySelectorAll("[data-del]").forEach(b => b.addEventListener("click", async () => {
+    if (!confirm("删除该优惠套餐？（数据库中仍会保留，前端不再显示）")) return;
+    try {
+      await LL.api("DELETE", "/api/merchant/packages/" + b.dataset.del);
+      LL.toast("已删除", "ok"); location.reload();
     } catch (e) { LL.toast(e.message, "err"); }
   }));
   main.querySelector("#pkgForm").addEventListener("submit", async e => {
@@ -632,6 +648,7 @@ async function shopCoupons(main, data) {
           '<div class="mt-2 d-flex gap-2">' +
           (c.status !== "published" ? '<button class="btn btn-main btn-sm" data-pub="' + c.id + '">发布</button>' : "") +
           (c.status === "published" ? '<button class="btn btn-ghost btn-sm" data-off="' + c.id + '">下线</button>' : "") +
+          '<button class="btn btn-ghost btn-sm text-danger" data-del="' + c.id + '">删除</button>' +
           "</div></div></div>";
       }).join("") + "</div>";
       listEl.querySelectorAll("[data-pub]").forEach(b => b.addEventListener("click", async () => {
@@ -640,6 +657,11 @@ async function shopCoupons(main, data) {
       }));
       listEl.querySelectorAll("[data-off]").forEach(b => b.addEventListener("click", async () => {
         try { await LL.api("PUT", "/api/merchant/coupons/" + b.dataset.off + "/status", { status: "offline" }); LL.toast("已下线", "ok"); await load(); }
+        catch (e) { LL.toast(e.message, "err"); }
+      }));
+      listEl.querySelectorAll("[data-del]").forEach(b => b.addEventListener("click", async () => {
+        if (!confirm("删除该优惠活动？（数据库中仍会保留，前端不再显示）")) return;
+        try { await LL.api("DELETE", "/api/merchant/coupons/" + b.dataset.del); LL.toast("已删除", "ok"); await load(); }
         catch (e) { LL.toast(e.message, "err"); }
       }));
     } catch (e) { listEl.innerHTML = '<div class="empty">' + LL.esc(e.message) + "</div>"; }

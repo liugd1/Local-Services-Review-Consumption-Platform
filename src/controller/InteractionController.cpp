@@ -94,4 +94,12 @@ void InteractionController::registerRoutes(httplib::Server& svr) {
                                                              getInt("size", 20)));
         });
     });
+    // 删除消费记录（软删除：前端不再展示，数据库保留）
+    svr.Delete(R"(/api/my/consumption/(\d+))", [&](const httplib::Request& req,
+                                                   httplib::Response& res) {
+        requireConsumer(req, res, [&](const api::AuthCtx& ctx) {
+            InteractionService::deleteConsumption(ctx.userId, std::stoll(req.matches[1].str()));
+            sendOk(res);
+        });
+    });
 }

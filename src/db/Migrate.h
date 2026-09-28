@@ -83,6 +83,13 @@ inline bool run() {
     if (!hasColumn("orders", "coupon_claim_id"))
         db.execute("ALTER TABLE orders ADD COLUMN coupon_claim_id INTEGER REFERENCES coupon_user (id)");
 
+    // 5.2) 软删除标记 deleted_at：前端删除后不再展示，但数据保留在库中
+    for (const char* t : {"consumption_records", "coupon_user", "orders", "services", "packages",
+                          "coupons"}) {
+        if (!hasColumn(t, "deleted_at"))
+            db.execute(std::string("ALTER TABLE ") + t + " ADD COLUMN deleted_at TEXT");
+    }
+
     // 6) 门店经营项目上架关系回填：存量门店 × 服务/套餐/活动 默认「上架」，
     //    保证升级后原有店铺仍可在门店页下单
     const std::string now = timeutil::nowStr();

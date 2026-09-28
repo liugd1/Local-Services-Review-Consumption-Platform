@@ -109,7 +109,8 @@ nlohmann::json CouponService::listPublished(long long merchantId) {
 
 nlohmann::json CouponService::receive(long long userId, long long couponId) {
     auto c = CouponDao::byId(couponId);
-    if (c.is_null()) throw BizError(resp::NOT_FOUND, "优惠活动不存在");
+    if (c.is_null() || !jsonStr(c, "deleted_at").empty())
+        throw BizError(resp::NOT_FOUND, "优惠活动不存在");
     if (CouponDao::alreadyClaimed(couponId, userId))
         throw BizError(resp::CONFLICT, "您已领取过该券，每人限领一张");
     int rc = CouponDao::tryReceive(couponId, userId);
@@ -155,8 +156,10 @@ nlohmann::json CouponService::usableFor(long long userId, long long storeId,
 
     nlohmann::json out = nlohmann::json::array();
     for (auto& claim : CouponDao::listUserClaims(userId, "unused")) {
-        // 券模板必须属于该门店所属商户、已发布且在有效期内、并且本门店参与该活动
+        // 券模板必须属于该门店所属商户、未删除、已发布且在有效期内、并且本门店参与该活动
         if (claim.value("merchant_id", 0LL) != merchantId) continue;
+        auto tpl = CouponDao::byId(claim.value("coupon_id", 0LL));
+        if (tpl.is_null() || !jsonStr(tpl, "deleted_at").empty()) continue;
         if (jsonStr(claim, "coupon_status") != "published") continue;
         if (now < jsonStr(claim, "start_time") || now > jsonStr(claim, "end_time")) continue;
         if (!MerchantDao::isOnSaleAtStore(storeId, "coupon", claim.value("coupon_id", 0LL))) continue;
@@ -186,6 +189,32 @@ nlohmann::json CouponService::usableFor(long long userId, long long storeId,
     return out;
 }
 
+// 删除卡券：未使用且「仍可正常使用」的券不能删（防止误删可用权益）；
+// 已核销、已过期的券可以删除
+void CouponService::deleteClaim(long long userId, long long claimId) {
+    auto claim = CouponDao::claimById(claimId);
+    if (claim.is_null() || claim.value("user_id", 0LL) != userId)
+        throw BizError(resp::NOT_FOUND, "卡券不存在或不属于你");
+    std::string now = timeutil::nowStr();
+    bool usable = jsonStr(claim, "claim_status") == "unused" &&
+                  jsonStr(claim, "status") == "published" && now >= jsonStr(claim, "start_time") &&
+                  now <= jsonStr(claim, "end_time");
+    if (usable)
+        throw BizError(resp::CONFLICT, "该券尚未使用且仍在有效期内，不能删除；请先使用或等到过期");
+    if (!CouponDao::softDeleteClaim(claimId))
+        throw BizError(resp::CONFLICT, "删除失败，卡券可能已被删除");
+}
+
+// 删除优惠活动（软删除）
+void CouponService::deleteCoupon(long long merchantUserId, long long couponId) {
+    auto m = myMerchantApproved(merchantUserId);
+    auto c = CouponDao::byId(couponId);
+    if (c.is_null() || c.value("merchant_id", 0LL) != m.value("id", 0LL))
+        throw BizError(resp::NOT_FOUND, "优惠活动不存在");
+    if (!CouponDao::softDeleteCoupon(couponId))
+        throw BizError(resp::CONFLICT, "该优惠活动已删除");
+}
+
 nlohmann::json CouponService::verify(long long merchantUserId, const std::string& code) {
     auto m = myMerchantApproved(merchantUserId);
     std::string c = code;
@@ -196,6 +225,8 @@ nlohmann::json CouponService::verify(long long merchantUserId, const std::string
 
     auto claim = CouponDao::byCode(c);
     if (claim.is_null()) throw BizError(resp::NOT_FOUND, "核销码不存在");
+    if (!jsonStr(claim, "deleted_at").empty())
+        throw BizError(resp::CONFLICT, "该优惠活动已被删除，无法核销");
     if (claim.value("merchant_id", 0LL) != m.value("id", 0LL))
         throw BizError(resp::NOT_FOUND, "该券不属于本店");
     if (jsonStr(claim, "claim_status") != "unused")

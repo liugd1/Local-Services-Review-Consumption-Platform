@@ -92,19 +92,23 @@ nlohmann::json listByUser(long long userId, const std::string& status, int page,
     const std::string lim = std::to_string(size);
     const std::string off = std::to_string((page - 1) * size);
     if (status.empty() || status == "all") {
-        auto tr = db.queryOne("SELECT COUNT(*) AS c FROM orders WHERE user_id = ?",
+        auto tr = db.queryOne("SELECT COUNT(*) AS c FROM orders WHERE user_id = ? "
+                              "AND deleted_at IS NULL",
                               {std::to_string(userId)});
         c = tr.is_null() ? 0 : tr.value("c", 0LL);
         rows = db.query(std::string(kOrderSelect) +
-                            "WHERE o.user_id = ? ORDER BY o.id DESC LIMIT ? OFFSET ?",
+                            "WHERE o.user_id = ? AND o.deleted_at IS NULL "
+                            "ORDER BY o.id DESC LIMIT ? OFFSET ?",
                         {std::to_string(userId), lim, off});
     } else {
-        auto tr = db.queryOne("SELECT COUNT(*) AS c FROM orders WHERE user_id = ? AND status = ?",
+        auto tr = db.queryOne("SELECT COUNT(*) AS c FROM orders WHERE user_id = ? AND status = ? "
+                              "AND deleted_at IS NULL",
                               {std::to_string(userId), status});
         c = tr.is_null() ? 0 : tr.value("c", 0LL);
         rows = db.query(
             std::string(kOrderSelect) +
-                "WHERE o.user_id = ? AND o.status = ? ORDER BY o.id DESC LIMIT ? OFFSET ?",
+                "WHERE o.user_id = ? AND o.status = ? AND o.deleted_at IS NULL "
+                "ORDER BY o.id DESC LIMIT ? OFFSET ?",
             {std::to_string(userId), status, lim, off});
     }
     total = c;
@@ -123,6 +127,12 @@ bool markRefunded(long long orderId, long long userId) {
                "UPDATE orders SET status = 'refunded' WHERE id = ? AND user_id = ? "
                "AND status = 'purchased'",
                {std::to_string(orderId), std::to_string(userId)}) == 1;
+}
+
+bool softDeleteOrder(long long orderId) {
+    return Database::instance().execute(
+               "UPDATE orders SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL",
+               {timeutil::nowStr(), std::to_string(orderId)}) == 1;
 }
 
 bool writeConsumption(long long userId, long long merchantId, long long storeId,

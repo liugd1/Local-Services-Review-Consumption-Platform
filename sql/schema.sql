@@ -97,7 +97,8 @@ CREATE TABLE IF NOT EXISTS services (
   images          TEXT    DEFAULT '',   -- 服务项目图片（多个用英文逗号分隔）
   status          TEXT    NOT NULL DEFAULT 'on'
                   CHECK (status IN ('on', 'off')),
-  created_at      TEXT    NOT NULL
+  created_at      TEXT    NOT NULL,
+  deleted_at      TEXT    -- 软删除（掌柜删除项目，数据保留）
 );
 CREATE INDEX IF NOT EXISTS idx_services_merchant ON services (merchant_id);
 
@@ -113,7 +114,8 @@ CREATE TABLE IF NOT EXISTS packages (
   images      TEXT    DEFAULT '',   -- 套餐图片（多个用英文逗号分隔）
   status      TEXT    NOT NULL DEFAULT 'on'
               CHECK (status IN ('on', 'off')),
-  created_at  TEXT    NOT NULL
+  created_at  TEXT    NOT NULL,
+  deleted_at  TEXT    -- 软删除（掌柜删除套餐，数据保留）
 );
 
 -- 9. 评价表（多目标：店铺/门店/服务/套餐 各自独立评论区）
@@ -241,7 +243,8 @@ CREATE TABLE IF NOT EXISTS consumption_records (
   package_id   INTEGER REFERENCES packages (id),
   amount       REAL    DEFAULT 0,
   consume_time TEXT    NOT NULL,
-  created_at   TEXT    NOT NULL
+  created_at   TEXT    NOT NULL,
+  deleted_at   TEXT    -- 软删除：非空表示用户已从前端删除（数据保留）
 );
 
 -- 19. 优惠活动表（优惠券/满减/折扣/套餐）
@@ -262,7 +265,8 @@ CREATE TABLE IF NOT EXISTS coupons (
   scope         TEXT    DEFAULT '',  -- 适用范围说明
   status        TEXT    NOT NULL DEFAULT 'published'
                 CHECK (status IN ('draft', 'published', 'offline')),
-  created_at    TEXT    NOT NULL
+  created_at    TEXT    NOT NULL,
+  deleted_at    TEXT    -- 软删除（掌柜删除活动，数据保留）
 );
 
 -- 20. 优惠券领取/使用记录
@@ -275,6 +279,7 @@ CREATE TABLE IF NOT EXISTS coupon_user (
               CHECK (status IN ('unused', 'used', 'expired')),
   received_at TEXT    NOT NULL,
   used_time   TEXT,
+  deleted_at  TEXT,   -- 软删除（用户从前端删除卡券，数据保留）
   UNIQUE (coupon_id, user_id)
 );
 
@@ -294,7 +299,8 @@ CREATE TABLE IF NOT EXISTS orders (
   status          TEXT    NOT NULL DEFAULT 'purchased'
                   CHECK (status IN ('purchased', 'used', 'refunded')),
   created_at      TEXT    NOT NULL,
-  used_time       TEXT
+  used_time       TEXT,
+  deleted_at      TEXT    -- 软删除（消费者从前端删除订单，数据保留）
 );
 
 -- 21d. 优惠套餐 × 服务项目（套餐由一个或多个服务项目组成，可含数量）

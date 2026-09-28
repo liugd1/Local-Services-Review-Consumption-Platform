@@ -177,13 +177,14 @@ nlohmann::json listServices(long long merchantId, const std::string& status) {
     if (status.empty()) {
         return db.query(
             "SELECT s.*, st.name AS store_name FROM services s "
-            "LEFT JOIN stores st ON st.id = s.store_id WHERE s.merchant_id = ? ORDER BY s.id DESC",
+            "LEFT JOIN stores st ON st.id = s.store_id "
+            "WHERE s.merchant_id = ? AND s.deleted_at IS NULL ORDER BY s.id DESC",
             {std::to_string(merchantId)});
     }
     return db.query(
         "SELECT s.*, st.name AS store_name FROM services s "
         "LEFT JOIN stores st ON st.id = s.store_id "
-        "WHERE s.merchant_id = ? AND s.status = ? ORDER BY s.id DESC",
+        "WHERE s.merchant_id = ? AND s.status = ? AND s.deleted_at IS NULL ORDER BY s.id DESC",
         {std::to_string(merchantId), status});
 }
 
@@ -216,6 +217,13 @@ long long addService(long long merchantId, const nlohmann::json& s) {
     // 新服务默认上架到该商户所有门店（可在「门店管理」按门店下架）
     if (id > 0) fanoutItemToStores(merchantId, "service", id);
     return id;
+}
+
+// 软删除：前端不再展示，数据库保留记录
+bool softDeleteService(long long id) {
+    return Database::instance().execute(
+               "UPDATE services SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL",
+               {timeutil::nowStr(), std::to_string(id)}) == 1;
 }
 
 void updateService(long long id, const nlohmann::json& s) {
@@ -257,11 +265,14 @@ nlohmann::json serviceById(long long id) {
 nlohmann::json listPackages(long long merchantId, const std::string& status) {
     auto& db = Database::instance();
     if (status.empty()) {
-        return db.query("SELECT * FROM packages WHERE merchant_id = ? ORDER BY id DESC",
-                        {std::to_string(merchantId)});
+        return db.query(
+            "SELECT * FROM packages WHERE merchant_id = ? AND deleted_at IS NULL ORDER BY id DESC",
+            {std::to_string(merchantId)});
     }
-    return db.query("SELECT * FROM packages WHERE merchant_id = ? AND status = ? ORDER BY id DESC",
-                    {std::to_string(merchantId), status});
+    return db.query(
+        "SELECT * FROM packages WHERE merchant_id = ? AND status = ? AND deleted_at IS NULL "
+        "ORDER BY id DESC",
+        {std::to_string(merchantId), status});
 }
 
 long long addPackage(long long merchantId, const nlohmann::json& p) {
@@ -290,6 +301,13 @@ void updatePackage(long long id, const nlohmann::json& p) {
 bool updatePackageStatus(long long id, const std::string& status) {
     return Database::instance().execute("UPDATE packages SET status = ? WHERE id = ?",
                                         {status, std::to_string(id)}) >= 0;
+}
+
+// 软删除：前端不再展示，数据库保留记录
+bool softDeletePackage(long long id) {
+    return Database::instance().execute(
+               "UPDATE packages SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL",
+               {timeutil::nowStr(), std::to_string(id)}) == 1;
 }
 
 nlohmann::json packageById(long long id) {
@@ -396,11 +414,13 @@ void fanoutStoreItems(long long merchantId, long long storeId) {
     const std::string now = timeutil::nowStr();
     db.execute(
         "INSERT OR IGNORE INTO store_services (store_id, service_id, status, created_at) "
-        "SELECT ?, sv.id, 'on', ? FROM services sv WHERE sv.merchant_id = ?",
+        "SELECT ?, sv.id, 'on', ? FROM services sv "
+        "WHERE sv.merchant_id = ? AND sv.deleted_at IS NULL",
         {std::to_string(storeId), now, std::to_string(merchantId)});
     db.execute(
         "INSERT OR IGNORE INTO store_packages (store_id, package_id, status, created_at) "
-        "SELECT ?, pk.id, 'on', ? FROM packages pk WHERE pk.merchant_id = ?",
+        "SELECT ?, pk.id, 'on', ? FROM packages pk "
+        "WHERE pk.merchant_id = ? AND pk.deleted_at IS NULL",
         {std::to_string(storeId), now, std::to_string(merchantId)});
     db.execute(
         "INSERT OR IGNORE INTO store_coupons (store_id, coupon_id, status, created_at) "
@@ -446,10 +466,12 @@ nlohmann::json storeOnSaleCounts(long long storeId) {
     };
     return {{"services", one("SELECT COUNT(*) AS c FROM store_services ss "
                              "JOIN services s ON s.id = ss.service_id "
-                             "WHERE ss.store_id = ? AND ss.status = 'on' AND s.status = 'on'")},
+                             "WHERE ss.store_id = ? AND ss.status = 'on' AND s.status = 'on' "
+                             "AND s.deleted_at IS NULL")},
             {"packages", one("SELECT COUNT(*) AS c FROM store_packages sp "
                              "JOIN packages p ON p.id = sp.package_id "
-                             "WHERE sp.store_id = ? AND sp.status = 'on' AND p.status = 'on'")},
+                             "WHERE sp.store_id = ? AND sp.status = 'on' AND p.status = 'on' "
+                             "AND p.deleted_at IS NULL")},
             {"coupons", one("SELECT COUNT(*) AS c FROM store_coupons sc "
                             "JOIN coupons c ON c.id = sc.coupon_id "
                             "WHERE sc.store_id = ? AND sc.status = 'on' AND c.status = 'published'")}};
@@ -464,14 +486,14 @@ nlohmann::json storeOfferings(long long storeId, long long merchantId) {
                   "IFNULL(ss.status, 'off') AS store_status "
                   "FROM services s LEFT JOIN store_services ss "
                   "ON ss.service_id = s.id AND ss.store_id = ? "
-                  "WHERE s.merchant_id = ? ORDER BY s.id DESC",
+                  "WHERE s.merchant_id = ? AND s.deleted_at IS NULL ORDER BY s.id DESC",
                   {sid, std::to_string(merchantId)})},
         {"packages",
          db.query("SELECT p.id, p.name, p.price, p.images, p.status AS item_status, "
                   "IFNULL(sp.status, 'off') AS store_status "
                   "FROM packages p LEFT JOIN store_packages sp "
                   "ON sp.package_id = p.id AND sp.store_id = ? "
-                  "WHERE p.merchant_id = ? ORDER BY p.id DESC",
+                  "WHERE p.merchant_id = ? AND p.deleted_at IS NULL ORDER BY p.id DESC",
                   {sid, std::to_string(merchantId)})},
         {"coupons",
          db.query("SELECT c.id, c.name, c.type, c.face_value, c.discount_rate, "
@@ -486,7 +508,8 @@ nlohmann::json listStoreServices(long long storeId) {
     return Database::instance().query(
         "SELECT s.id, s.name, s.price, s.price_unit, s.applicable_time, s.stock, s.limit_count, "
         "s.images, s.merchant_id FROM store_services ss JOIN services s ON s.id = ss.service_id "
-        "WHERE ss.store_id = ? AND ss.status = 'on' AND s.status = 'on' ORDER BY s.id DESC",
+        "WHERE ss.store_id = ? AND ss.status = 'on' AND s.status = 'on' AND s.deleted_at IS NULL "
+        "ORDER BY s.id DESC",
         {std::to_string(storeId)});
 }
 
@@ -494,7 +517,8 @@ nlohmann::json listStorePackages(long long storeId) {
     return Database::instance().query(
         "SELECT p.id, p.name, p.content, p.price, p.valid_days, p.limit_count, p.images, "
         "p.merchant_id FROM store_packages sp JOIN packages p ON p.id = sp.package_id "
-        "WHERE sp.store_id = ? AND sp.status = 'on' AND p.status = 'on' ORDER BY p.id DESC",
+        "WHERE sp.store_id = ? AND sp.status = 'on' AND p.status = 'on' AND p.deleted_at IS NULL "
+        "ORDER BY p.id DESC",
         {std::to_string(storeId)});
 }
 
@@ -504,7 +528,7 @@ nlohmann::json listStoreCoupons(long long storeId) {
         "SELECT c.*, m.name AS merchant_name FROM store_coupons sc "
         "JOIN coupons c ON c.id = sc.coupon_id JOIN merchants m ON m.id = c.merchant_id "
         "WHERE sc.store_id = ? AND sc.status = 'on' AND c.status = 'published' "
-        "AND c.start_time <= ? AND c.end_time >= ? ORDER BY c.id DESC",
+        "AND c.start_time <= ? AND c.end_time >= ? AND c.deleted_at IS NULL ORDER BY c.id DESC",
         {std::to_string(storeId), now, now});
 }
 

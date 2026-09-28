@@ -27,6 +27,10 @@ nlohmann::json claimById(long long claimId);
 // 下单占用 / 退款归还
 bool markClaimUsed(long long claimId);
 bool releaseClaim(long long claimId);
+// 软删除：用户从前端删除卡券（数据保留）
+bool softDeleteClaim(long long claimId);
+// 软删除：掌柜删除优惠活动（数据保留）
+bool softDeleteCoupon(long long couponId);
 
 // 领取：防超发 + 幂等（同一用户对同一活动限领一张）
 int tryReceive(long long couponId, long long userId);

@@ -255,6 +255,25 @@ void MerchantService::bulkStoreOffering(long long userId, long long storeId,
     MerchantDao::bulkStoreOffering(storeId, mid, kind, status);
 }
 
+// ---------------- 删除（软删除）----------------
+void MerchantService::deleteService(long long userId, long long serviceId) {
+    auto m = myMerchantOrThrow(userId);
+    requireApproved(m);
+    auto mid = merchantIdOf(m);
+    assertServiceOwned(mid, serviceId);   // 归属校验
+    if (!MerchantDao::softDeleteService(serviceId))
+        throw BizError(resp::CONFLICT, "该服务项目已删除");
+}
+
+void MerchantService::deletePackage(long long userId, long long packageId) {
+    auto m = myMerchantOrThrow(userId);
+    requireApproved(m);
+    auto mid = merchantIdOf(m);
+    assertPackageOwned(mid, packageId);   // 归属校验
+    if (!MerchantDao::softDeletePackage(packageId))
+        throw BizError(resp::CONFLICT, "该优惠套餐已删除");
+}
+
 // ---------------- 服务项目 ----------------
 nlohmann::json MerchantService::listServices(long long userId, const std::string& status) {
     return MerchantDao::listServices(merchantIdOf(myMerchantOrThrow(userId)), status);

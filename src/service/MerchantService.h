@@ -31,6 +31,10 @@ public:
     static void setStoreOffering(long long userId, long long storeId, const nlohmann::json& body);
     static void bulkStoreOffering(long long userId, long long storeId, const nlohmann::json& body);
 
+    // ---- 删除（软删除：前端不再展示，数据库保留）----
+    static void deleteService(long long userId, long long serviceId);
+    static void deletePackage(long long userId, long long packageId);
+
     // ---- 服务项目 ----
     static nlohmann::json listServices(long long userId, const std::string& status);
     static nlohmann::json addService(long long userId, const nlohmann::json& body);

@@ -26,5 +26,7 @@ nlohmann::json listHistory(long long userId, int limit);
 // ---- 消费记录 ----
 bool addConsumption(long long userId, const nlohmann::json& rec);
 nlohmann::json listConsumptions(long long userId, int page, int size, long long& total);
+// 软删除：用户从前端删除消费记录（数据保留）
+bool softDeleteConsumption(long long id, long long userId);
 
 }  // namespace InteractionDao

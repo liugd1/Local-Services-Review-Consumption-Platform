@@ -154,7 +154,7 @@ bool addConsumption(long long userId, const nlohmann::json& rec) {
 nlohmann::json listConsumptions(long long userId, int page, int size, long long& total) {
     auto& db = Database::instance();
     auto totalRow = db.queryOne(
-        "SELECT COUNT(*) AS c FROM consumption_records WHERE user_id = ?",
+        "SELECT COUNT(*) AS c FROM consumption_records WHERE user_id = ? AND deleted_at IS NULL",
         {std::to_string(userId)});
     total = totalRow.is_null() ? 0 : totalRow.value("c", 0LL);
     int offset = (page - 1) * size;
@@ -165,8 +165,16 @@ nlohmann::json listConsumptions(long long userId, int page, int size, long long&
         "JOIN merchants m ON m.id = cr.merchant_id "
         "LEFT JOIN services s ON s.id = cr.service_id "
         "LEFT JOIN packages p ON p.id = cr.package_id "
-        "WHERE cr.user_id = ? ORDER BY cr.id DESC LIMIT ? OFFSET ?",
+        "WHERE cr.user_id = ? AND cr.deleted_at IS NULL ORDER BY cr.id DESC LIMIT ? OFFSET ?",
         {std::to_string(userId), std::to_string(size), std::to_string(offset)});
+}
+
+// 软删除：用户从前端删除消费记录（数据保留）
+bool softDeleteConsumption(long long id, long long userId) {
+    return Database::instance().execute(
+               "UPDATE consumption_records SET deleted_at = ? WHERE id = ? AND user_id = ? "
+               "AND deleted_at IS NULL",
+               {timeutil::nowStr(), std::to_string(id), std::to_string(userId)}) == 1;
 }
 
 }  // namespace InteractionDao
