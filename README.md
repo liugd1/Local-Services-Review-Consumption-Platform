@@ -3,7 +3,7 @@
 > **C++17 RESTful 后端 + 原生单页前端** 的本地生活服务（餐饮 / 休闲娱乐 / 美容美发 / 运动健身 / 摄影 / 桌游 / KTV）评价与消费平台，
 > 面向 **普通消费者 · 商户经营者 · 平台管理员** 三类角色。
 >
-> 更新日期：2026-09-08
+> 更新日期：2026-10-20
 
 ---
 
@@ -255,7 +255,7 @@ Local-Services-Review-Consumption-Platform/
 
 ---
 
-## 8. 数据库设计（`sql/schema.sql`，24 张表）
+## 8. 数据库设计（`sql/schema.sql`，29 张表）
 
 | 分组 | 表 | 说明 |
 | --- | --- | --- |
@@ -291,7 +291,7 @@ Local-Services-Review-Consumption-Platform/
 | 注册 / 登录 / 登出 | `POST /api/auth/register`、`/api/auth/login`、`/api/auth/logout` |
 | 我的资料 / 修改 | `GET` / `PUT /api/user/profile` |
 | 兴趣偏好 | `PUT /api/user/preferences` |
-| 我的收藏 / 关注 / 足迹 / 消费 | `GET /api/my/favorites?type=`、`/api/my/follows`、`/api/my/history`、`/api/my/consumption` |
+| 我的收藏 / 关注 / 足迹 / 消费 | `GET /api/my/favorites?type=`、`/api/my/follows`、`/api/my/history`、`/api/my/consumptions?page=&size=` |
 | 收藏 / 关注 / 记账 | `POST|DELETE /api/favorite`、`POST|DELETE /api/follow`、`POST /api/consume`（可选 `service_id` / `package_id` 关联项目） |
 
 ### 9.2 商户与经营（模块 2）
@@ -313,7 +313,7 @@ Local-Services-Review-Consumption-Platform/
 | 说明 | 方法与路径 |
 | --- | --- |
 | 组合搜索 | `GET /api/search?keyword=&category=&area=&price_min=&price_max=&min_score=&sort=&page=` |
-| 榜单 | `GET /api/hot`、`/api/new`、`/api/categories`、`/api/categories/{id}/merchants` |
+| 榜单 | 人气热榜 `GET /api/rank/hot`、新店榜 `GET /api/rank/new`、分类榜 `GET /api/rank/category/{id}`、类别列表 `GET /api/categories` |
 | 商户详情（含浏览计数） | `GET /api/merchants/{id}` |
 | **门店详情（选购入口）** | `GET /api/stores/{id}`（门店信息 + 本店在售服务/套餐/活动 + 门店口碑汇总） |
 | 某商户可领券列表 | `GET /api/coupons?merchant_id=` |
@@ -345,14 +345,56 @@ Local-Services-Review-Consumption-Platform/
 
 | 说明 | 方法与路径 |
 | --- | --- |
-| 商户审核 | `GET /api/admin/merchants?status=pending`、`PUT /api/admin/merchants/{id}` |
+| 商户审核 | `GET /api/admin/merchants?status=pending`、`PUT /api/admin/merchants/{id}/audit`（body：`status=approved\|rejected`，驳回需 `reason`） |
 | 举报中心 | `GET /api/admin/reports`、`PUT /api/admin/reports/{id}` |
 | 用户管理 | `GET /api/admin/users`、`PUT /api/admin/users/{id}/status` |
 | 平台运营看板 | `GET /api/admin/stats` |
 
+### 9.7 统计口径（要求 8）
+
+| 指标 | 口径说明 |
+| --- | --- |
+| 浏览量 `view_count` | 商户详情 / 门店详情被访问次数累加（`merchants.view_count`） |
+| 收藏量 `favorite_count` | `favorites` 中 `target_type='merchant'` 且 `target_id` = 本店 |
+| 关注量 `follower_count` | `follows` 中 `merchant_id` = 本店 |
+| 评价数量 / 平均分 `review_count` `avg_score` | 仅统计 `status='visible'` 且 `target_type='merchant'` 的店铺评价；服务/套餐评价不污染店铺分，评价下架或删除后实时回落 |
+| 订单量 `order_count` | 未软删除订单，**服务订单与套餐订单都计入**（按 `package_id` / `service_id` / `store_id` 归属商户） |
+| 成交额 `order_amount` | 未软删除且**未退款**订单的实付金额合计（已扣优惠券抵扣） |
+| 核销量 / 退款量 `order_used` `order_refunded` | 状态为 `used` / `refunded` 的未删除订单数 |
+| 券领取 / 核销 `coupons.received` `coupons.used` | 领取数 / 核销数（下单占用 +1，退款归还 -1，与卡券明细一致） |
+| 热门服务 `hot_services` | `consumption_records` 按项目聚合，**服务消费与套餐消费合并排名**，排除软删除，取前 5 |
+| 近 7 日趋势 `trend` | 固定返回 7 天（缺失日期补 0），含消费笔数 / 消费额 / 订单数 |
+| 平台活跃用户 `active_7d` `active_30d` | 近 7 / 30 日有下单、评价、消费或浏览行为的去重用户数 |
+| 平台类别分布 `category_dist` | 每个类别下 `approved` 商户数量 |
+
+> 口径一致性由 `docs/tests/api_all_modules.mjs` 的第 8 组用例逐项校验
+> （看板数值 ↔ 商户详情评分 ↔ 订单/消费/卡券明细 ↔ 趋势逐日数据）。
+
 ---
 
 ## 10. 验证情况
+
+**八项基本功能全量接口回归（`docs/tests/api_all_modules.mjs`，173 个断言全部通过）**
+
+```bash
+node docs/tests/api_all_modules.mjs      # 需先启动 build/locallife.exe
+```
+
+> 该脚本会写入一批带时间戳的回归数据（测试商户 / 消费者 / 订单 / 评价），
+> 如需干净演示数据请删除 `data/locallife.db` 后重启服务。
+
+- 覆盖要求 1-8：注册 / 登录 / 消费偏好 / 三角色越权 → 入驻审核 / 门店 / 图片 / 服务项目 / 套餐 →
+  关键词 + 类别 + 区域 + 价格区间 + 评分组合检索与三类榜单 → 收藏 / 关注 / 足迹 / 消费记录（含软删除）→
+  三维评分评价 / 图文 / 点赞 / 评论楼中楼 / 掌柜回复 / 举报与平台裁决 →
+  优惠活动创建发布 / 领取防重 / 适用范围 / 核销 → 门店下单 / 限购 / 用券抵扣 / 核销联动消费 / 退款归还券 →
+  商户经营看板与平台运营看板的口径一致性。
+- 一致性闭环断言示例：评价被举报下架后，商户详情与经营看板的 `review_count / avg_score` 同步回落为 0；
+  订单退款后成交额剔除该单且优惠券归还为未使用；订单核销后「热门服务」同时出现服务与套餐两类记录；
+  近 7 日趋势固定 7 条并补齐 0 值。
+
+**既有回归脚本（全部通过）**：`api_package_coupon.mjs` 31/31、`store_order_flow.mjs` 22/22、
+`soft_delete.mjs` 34/34、`apply_flow.mjs` 16/16、`consume_item.mjs` 14/14
+（Playwright 脚本运行前需 `$env:npm_root_global = npm root -g`）。
 
 **接口回归（curl）**：注册/登录/越权 401·403、入驻→审核→上架全流程、组合检索与分页、
 收藏关注幂等、评价聚合一致性、评论链 A→B→C→D、举报→裁决、图片上传与静态回读；

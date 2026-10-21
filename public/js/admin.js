@@ -179,10 +179,11 @@ async function renderAdminStats(main) {
   const t = (s.trend || []).slice().reverse();
   main.innerHTML =
     '<div class="stat-cards">' +
-    '<div class="stat-card"><i class="bi bi-people ic"></i><b>' + (s.users.total || 0) + '</b><span>用户（今日+ ' + (s.users.today_new || 0) + '）</span></div>' +
+    '<div class="stat-card"><i class="bi bi-people ic"></i><b>' + (s.users.total || 0) + '</b><span>用户（7 日活跃 ' + (s.users.active_7d || 0) + ' · 今日新增 ' + (s.users.today_new || 0) + '）</span></div>' +
     '<div class="stat-card"><i class="bi bi-shop ic"></i><b>' + (s.merchants.approved || 0) + '</b><span>在营商户/共 ' + (s.merchants.total || 0) + '</span></div>' +
     '<div class="stat-card"><i class="bi bi-chat-square-quote ic"></i><b>' + (s.reviews.visible || 0) + '</b><span>公开评价</span></div>' +
-    '<div class="stat-card"><i class="bi bi-bag ic"></i><b>' + (s.orders.total || 0) + '</b><span>订单 ' + fmt(s.orders.amount) + '</span></div>' +
+    '<div class="stat-card"><i class="bi bi-bag ic"></i><b>' + (s.orders.total || 0) + '</b><span>订单 ' + fmt(s.orders.amount) +
+      (Number(s.orders.refunded) ? ' · 退款 ' + s.orders.refunded : '') + '</span></div>' +
     '<div class="stat-card"><i class="bi bi-receipt ic"></i><b>' + (s.consumption.total || 0) + '</b><span>消费流水 ' + fmt(s.consumption.amount) + '</span></div>' +
     '<div class="stat-card"><i class="bi bi-flag ic"></i><b>' + (s.reviews.pending_reports || 0) + '</b><span>待处理举报</span></div></div>' +
     '<div class="panel"><h5><i class="bi bi-graph-up"></i> 近 7 日平台趋势（新增用户 / 订单量 / 消费额）</h5><div id="adTrend" style="height:300px"></div></div>' +

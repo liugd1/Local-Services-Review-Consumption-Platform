@@ -230,10 +230,13 @@ int tryReceive(long long couponId, long long userId) {
 bool tryVerify(long long couponId, long long merchantId, long long claimId) {
     auto& db = Database::instance();
     std::string now = timeutil::nowStr();
+    // 归属校验下沉到 SQL：只有「本商户发布的该活动」的券才能被核销（防越权核销）
     long changed = db.execute(
         "UPDATE coupon_user SET status = 'used', used_time = ? WHERE id = ? "
-        "AND coupon_id = ? AND status = 'unused'",
-        {now, std::to_string(claimId), std::to_string(couponId)});
+        "AND coupon_id = ? AND status = 'unused' "
+        "AND EXISTS (SELECT 1 FROM coupons c WHERE c.id = coupon_user.coupon_id "
+        "            AND c.merchant_id = ?)",
+        {now, std::to_string(claimId), std::to_string(couponId), std::to_string(merchantId)});
     if (changed != 1) return false;
     db.execute("UPDATE coupons SET used = used + 1 WHERE id = ?", {std::to_string(couponId)});
     return true;
@@ -274,9 +277,15 @@ bool softDeleteCoupon(long long couponId) {
 }
 
 nlohmann::json claimByUserAndCoupon(long long couponId, long long userId) {
+    // 显式列别名：避免 cu.* 与 c.* 的同名列（id/status/created_at）互相覆盖
     auto row = Database::instance().queryOne(
-        "SELECT cu.*, c.*, m.name AS merchant_name FROM coupon_user cu "
-        "JOIN coupons c ON c.id = cu.coupon_id JOIN merchants m ON m.id = c.merchant_id "
+        "SELECT cu.id AS claim_id, cu.coupon_id, cu.user_id, cu.code, "
+        "cu.status AS claim_status, cu.received_at, cu.used_time, "
+        "c.name, c.type, c.face_value, c.threshold, c.discount_rate, c.scope, "
+        "c.start_time, c.end_time, c.status AS coupon_status, c.merchant_id, "
+        "m.name AS merchant_name "
+        "FROM coupon_user cu JOIN coupons c ON c.id = cu.coupon_id "
+        "JOIN merchants m ON m.id = c.merchant_id "
         "WHERE cu.coupon_id = ? AND cu.user_id = ?",
         {std::to_string(couponId), std::to_string(userId)});
     return row.is_null() ? nlohmann::json(nullptr) : row;

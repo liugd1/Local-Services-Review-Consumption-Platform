@@ -8,9 +8,9 @@
 #include "util/Json.h"
 
 void InteractionController::registerRoutes(httplib::Server& svr) {
-    // 通用：需消费者登录
-    auto requireConsumer = [](const httplib::Request& req, httplib::Response& res,
-                              const std::function<void(const api::AuthCtx&)>& fn) {
+    // 通用：需消费者登录（原始校验）
+    auto requireConsumer0 = [](const httplib::Request& req, httplib::Response& res,
+                               const std::function<void(const api::AuthCtx&)>& fn) {
         auto ctx = api::authenticate(req);
         if (!ctx) {
             sendUnauthorized(res);
@@ -21,6 +21,12 @@ void InteractionController::registerRoutes(httplib::Server& svr) {
             return;
         }
         fn(*ctx);
+    };
+
+    // 统一异常保护：业务异常（参数/不存在等）必须映射为 400/404，而不是未捕获异常导致的 500
+    auto requireConsumer = [&](const httplib::Request& req, httplib::Response& res,
+                               const std::function<void(const api::AuthCtx&)>& fn) {
+        guard([&] { requireConsumer0(req, res, fn); }, res);
     };
 
     // ---- 收藏 ----

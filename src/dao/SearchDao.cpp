@@ -52,15 +52,17 @@ nlohmann::json search(const SearchParams& p, long long& total) {
         params.push_back("%" + p.area + "%");
     }
     if (p.priceMin > 0) {
-        where += " AND m.price_max >= ? ";
+        // 显式数值转换：绑定参数是文本，表达式/列比较时需避免 SQLite 的「数值 < 文本」比较规则
+        where += " AND m.price_max >= CAST(? AS REAL) ";
         params.push_back(std::to_string(p.priceMin));
     }
     if (p.priceMax > 0) {
-        where += " AND m.price_min <= ? ";
+        where += " AND m.price_min <= CAST(? AS REAL) ";
         params.push_back(std::to_string(p.priceMax));
     }
     if (p.minScore > 0) {
-        where += " AND rv.avg_score >= ? ";
+        // 聚合列（AVG 结果）没有类型亲和性，必须 CAST，否则条件恒为假
+        where += " AND rv.avg_score >= CAST(? AS REAL) ";
         params.push_back(std::to_string(p.minScore));
     }
 

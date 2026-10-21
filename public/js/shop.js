@@ -559,7 +559,8 @@ async function shopStats(main) {
     '<div class="stat-card"><i class="bi bi-heart ic"></i><b>' + (s.favorite_count || 0) + '</b><span>收藏数</span></div>' +
     '<div class="stat-card"><i class="bi bi-bell ic"></i><b>' + (s.follower_count || 0) + '</b><span>关注数</span></div>' +
     '<div class="stat-card"><i class="bi bi-star ic"></i><b>' + (s.avg_score || 0) + '</b><span>均分(' + (s.review_count || 0) + '评)</span></div>' +
-    '<div class="stat-card"><i class="bi bi-bag ic"></i><b>' + (s.order_count || 0) + '</b><span>订单 ' + fmt(s.order_amount) + '</span></div>' +
+    '<div class="stat-card"><i class="bi bi-bag ic"></i><b>' + (s.order_count || 0) + '</b><span>订单 ' + fmt(s.order_amount) +
+      (Number(s.order_refunded) ? ' · 退款 ' + s.order_refunded : '') + '</span></div>' +
     '<div class="stat-card"><i class="bi bi-ticket ic"></i><b>' + ((s.coupons || {}).received || 0) + '</b><span>券领取/核销 ' + ((s.coupons || {}).used || 0) + '</span></div></div>' +
     '<div class="panel"><h5><i class="bi bi-graph-up"></i> 近 7 日经营趋势（消费额/笔数）</h5><div id="mTrend" style="height:280px"></div></div>' +
     '<div class="panel mt-3"><h5><i class="bi bi-fire"></i> 热门服务</h5><div id="hotSvc"></div></div>';
@@ -584,7 +585,8 @@ async function shopStats(main) {
   const hot = s.hot_services || [];
   const h = document.getElementById("hotSvc");
   h.innerHTML = hot.length
-    ? hot.map(x => '<div class="good-row"><div class="good-name"><b>' + LL.esc(x.name) + '</b><small>被消费 ' + (x.times || 0) + ' 次</small></div>' +
+    ? hot.map(x => '<div class="good-row"><div class="good-name"><b>' + LL.esc(x.name) + '</b><small>' +
+      (x.item_type === "package" ? "套餐 · " : "服务 · ") + '被消费 ' + (x.times || 0) + ' 次</small></div>' +
       '<span class="price-min">' + fmt(x.amount) + "</span></div>").join("")
     : emptyBox("暂无服务消费数据");
 }

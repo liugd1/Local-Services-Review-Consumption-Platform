@@ -226,10 +226,13 @@ nlohmann::json ReviewService::toggleLike(long long userId, long long reviewId, b
         throw BizError(resp::NOT_FOUND, "评价不存在");
     if (like) {
         ReviewDao::likeAdd(reviewId, userId);
-        return {{"liked", true}};
+    } else {
+        ReviewDao::likeRemove(reviewId, userId);
     }
-    ReviewDao::likeRemove(reviewId, userId);
-    return {{"liked", false}};
+    // 返回最新点赞数，便于前端直接刷新（与评论点赞接口保持一致的字段）
+    auto after = ReviewDao::reviewById(reviewId);
+    return {{"liked", like},
+            {"like_count", after.is_null() ? 0LL : after.value("like_count", 0LL)}};
 }
 
 void ReviewService::commentReview(long long userId, long long reviewId,

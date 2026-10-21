@@ -2,6 +2,7 @@
 // SQLite 数据库封装：线程安全（互斥串行化）、参数绑定防注入、事务 RAII
 #include <sqlite3.h>
 
+#include <cstdio>
 #include <mutex>
 #include <stdexcept>
 #include <string>
@@ -116,6 +117,9 @@ private:
         if (!db_) return nullptr;
         sqlite3_stmt* st = nullptr;
         if (sqlite3_prepare_v2(db_, sql.c_str(), -1, &st, nullptr) != SQLITE_OK) {
+            // 不再静默失败：SQL 语法/字段错误必须能在日志中定位
+            std::fprintf(stderr, "[sql-error] %s | SQL: %s\n",
+                         sqlite3_errmsg(db_), sql.c_str());
             return nullptr;
         }
         for (size_t i = 0; i < params.size(); ++i) {
@@ -152,6 +156,9 @@ private:
         sqlite3_stmt* st = prepare(sql, params);
         if (!st) return -1;
         int rc = sqlite3_step(st);
+        if (rc != SQLITE_DONE && rc != SQLITE_ROW) {
+            std::fprintf(stderr, "[sql-error] %s | SQL: %s\n", sqlite3_errmsg(db_), sql.c_str());
+        }
         sqlite3_finalize(st);
         return rc == SQLITE_DONE || rc == SQLITE_ROW ? sqlite3_changes(db_) : -1;
     }
