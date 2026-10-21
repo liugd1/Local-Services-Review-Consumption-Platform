@@ -94,7 +94,10 @@ build/locallife.exe          # Windows
   「全部 / 店铺 / 门店 / 服务 / 套餐」切换（带条数徽标）。
 - **评分规则**：环境 / 服务 / 性价比 三维各 1–5 星，均值保留一位小数实时聚合；
   **店铺评分只统计 `target_type='merchant'` 的可见评价**，服务与套餐好评不会污染店铺分。
-- **图文评价**：发布时可即时上传图片并预览（jpg / png / gif / webp，≤6 张，≤8MB）。
+- **图文评价**：发布时可即时上传图片并预览（jpg / png / gif / webp，≤6 张，≤8MB）；
+  `images` 只接受 `/api/upload` 返回的站内地址（`/uploads/…`，外链与 `../` 一律 400），
+  落库失败整条评价回滚，避免出现「配图静默丢失」；消费者评价卡、掌柜「评价与回复」、
+  管理员举报核查三处均展示图片，点击可看原图。
 - **任意层评论可回复**：点击评价卡「评论 N」展开评论楼；主评论与楼中楼子评论都有「回复」按钮，
   例如 A 评服务 → B 回复 A → C 回复 B → D 回复 C 均成立；展示采用「主评论 + 平铺回复」
   （`AliceRenamed 回复 @AliceRenamed：…`），不无限缩进。
@@ -322,7 +325,8 @@ Local-Services-Review-Consumption-Platform/
 
 | 说明 | 方法与路径 |
 | --- | --- |
-| 发表评价（对象化） | `POST /api/review`（body：`merchant_id`、`target_type`、`target_id`、三维评分、图文） |
+| 发表评价（对象化） | `POST /api/review`（body：`merchant_id`、`target_type`、`target_id`、三维评分、`content`、`images[]`） |
+| 上传评价图片 | `POST /api/upload`（multipart，字段 `file`，返回 `{url,size}`；`url` 即 `images[]` 元素） |
 | 我的评价 / 店内评价 | `GET /api/my/reviews`、`GET /api/merchants/{id}/reviews?type=`、`/reviews/summary` |
 | 对象评论区 | `GET /api/targets/{type}/{id}/reviews`、`/api/targets/{type}/{id}/info` |
 | 评论（任意层回复） | `POST /api/review/{id}/comment`（带 `parent_id`）、`GET /api/review/{id}/comments` |

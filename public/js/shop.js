@@ -434,11 +434,16 @@ async function shopReply(main, data) {
     main.innerHTML = '<div class="panel">' + emptyBox("还没有收到评价，等第一位街坊的光临吧") + "</div>";
     return;
   }
-  main.innerHTML = '<div class="table-card"><div class="t-head"><h5>评价与回复（' + rows.length + '）</h5></div><div class="p-3">' +
+  main.innerHTML = '<div class="table-card"><div class="t-head"><h5>评价与回复（' + rows.length + '）</h5>' +
+    '<span class="text-muted" style="font-size:12.5px">顾客晒图可直接点击放大核对</span></div><div class="p-3">' +
     rows.map(r => '<div class="panel mb-3"><div class="d-flex align-items-center gap-2 mb-2">' + LL.avatarHtml(r) +
-      "<div><b>" + LL.esc(r.nickname || r.username) + "</b> <span class='text-muted' style='font-size:12px'>" + LL.starsHtml(r.avg_score) + " " + LL.esc(String(r.created_at || "").slice(0, 10)) + "</span></div>" +
+      "<div><b>" + LL.esc(r.nickname || r.username) + "</b> <span class='text-muted' style='font-size:12px'>" + LL.starsHtml(r.avg_score) + " " + LL.esc(String(r.created_at || "").slice(0, 10)) + "</span>" +
+      ((r.images || []).length ? ' <span class="badge-soft badge-pending">含图 ' + r.images.length + " 张</span>" : "") + "</div>" +
       '<span class="score ms-auto">' + Number(r.avg_score).toFixed(1) + "</span></div>" +
       '<p class="mb-2">' + LL.esc(r.content || "") + "</p>" +
+      ((r.images || []).length
+        ? '<div class="rv-imgs mb-2">' + r.images.map(u => '<img src="' + LL.esc(u) + '" data-view-src="' + LL.esc(u) + '" title="点击查看大图" loading="lazy" alt="顾客晒图">').join("") + "</div>"
+        : "") +
       (r.merchant_reply
         ? '<div class="reply-box mb-2"><b>掌柜已回复：</b>' + LL.esc(r.merchant_reply) + "</div>"
         : '<span class="badge-soft badge-pending">待回复</span>') +

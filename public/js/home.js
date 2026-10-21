@@ -587,7 +587,7 @@ function reviewCard(r) {
     '</div><div class="stars" style="font-size:12px">' + LL.starsHtml(r.avg_score) + "</div></div></div>" +
     '<div class="rate-tags mt-2"><span class="rate-pill" style="width:100%">' + dims + "</span></div>" +
     (r.content ? '<p class="rv-content">' + LL.esc(r.content) + "</p>" : "") +
-    ((r.images || []).length ? '<div class="rv-imgs">' + r.images.map(i => '<img src="' + LL.esc(i) + '" loading="lazy" alt="">').join("") + "</div>" : "") +
+    ((r.images || []).length ? '<div class="rv-imgs">' + r.images.map(i => '<img src="' + LL.esc(i) + '" data-view-src="' + LL.esc(i) + '" title="点击查看大图" loading="lazy" alt="评价图片">').join("") + "</div>" : "") +
     (r.merchant_reply ? '<div class="reply-box"><b>掌柜回复：</b>' + LL.esc(r.merchant_reply) + "</div>" : "") +
     '<div class="rv-foot">' +
     '<span class="act act-like" data-id="' + r.id + '"><i class="bi bi-hand-thumbs-up"></i> 有用 <b>' + Number(r.like_count) + "</b></span>" +

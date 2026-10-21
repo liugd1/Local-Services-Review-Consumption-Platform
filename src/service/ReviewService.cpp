@@ -1,5 +1,7 @@
 #include "service/ReviewService.h"
 
+#include <algorithm>
+#include <cctype>
 #include <cmath>
 
 #include "dao/MerchantDao.h"
@@ -68,6 +70,34 @@ nlohmann::json resolveObject(const std::string& type, long long id) {
 
 double roundScore(double v) { return std::round(v * 10.0) / 10.0; }
 
+// 去掉首尾空白（图片地址常带空格）
+std::string trimCopy(const std::string& s) {
+    auto b = s.find_first_not_of(" \t\r\n");
+    if (b == std::string::npos) return "";
+    auto e = s.find_last_not_of(" \t\r\n");
+    return s.substr(b, e - b + 1);
+}
+
+// 图片地址白名单：只接受本平台 /api/upload 返回的 /uploads/xxx.(jpg|jpeg|png|gif|webp)，
+// 拒绝外链、data:、javascript: 与 ../ 路径穿越，保证评价图片都是站内真实文件。
+bool isPlatformImage(const std::string& p) {
+    static const std::string kPrefix = "/uploads/";
+    if (p.size() <= kPrefix.size() || p.size() > 200) return false;
+    if (p.compare(0, kPrefix.size(), kPrefix) != 0) return false;
+    if (p.find("..") != std::string::npos) return false;
+    for (char c : p) {
+        bool ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+                  (c >= '0' && c <= '9') || c == '/' || c == '_' || c == '-' || c == '.';
+        if (!ok) return false;
+    }
+    auto dot = p.find_last_of('.');
+    if (dot == std::string::npos) return false;
+    std::string ext = p.substr(dot + 1);
+    for (auto& c : ext) c = static_cast<char>(::tolower(static_cast<unsigned char>(c)));
+    return ext == "jpg" || ext == "jpeg" || ext == "png" || ext == "gif" || ext == "webp";
+}
+
+
 void checkScore(double v) {
     if (v < 1 || v > 5) throw BizError(resp::PARAM_ERROR, "评分数值需在 1-5 之间");
 }
@@ -104,13 +134,18 @@ nlohmann::json ReviewService::postReview(long long userId, const nlohmann::json&
     std::string content = jsonStr(body, "content");
     if (content.size() > 2000) throw BizError(resp::PARAM_ERROR, "评价内容过长（最多 2000 字）");
 
+    // 图文评价：images 为 /api/upload 返回的 url 数组，最多 6 张，只接受站内上传目录
     nlohmann::json images = nlohmann::json::array();
     auto it = body.find("images");
     if (it != body.end() && it->is_array()) {
         for (const auto& img : *it) {
             if (!img.is_string()) continue;
-            std::string p = img.get<std::string>();
-            if (!p.empty() && p.size() <= 200) images.push_back(p);
+            std::string p = trimCopy(img.get<std::string>());
+            if (p.empty()) continue;
+            if (!isPlatformImage(p))
+                throw BizError(resp::PARAM_ERROR,
+                               "图片地址不合法，请先用 /api/upload 上传并提交返回的 url");
+            if (std::find(images.begin(), images.end(), p) == images.end()) images.push_back(p);
         }
         if (images.size() > 6) throw BizError(resp::PARAM_ERROR, "最多上传 6 张图片");
     }
@@ -133,7 +168,11 @@ nlohmann::json ReviewService::postReview(long long userId, const nlohmann::json&
     if (!images.empty()) {
         std::vector<std::string> paths;
         for (const auto& img : images) paths.push_back(img.get<std::string>());
-        ReviewDao::addReviewImages(id, paths);
+        if (!ReviewDao::addReviewImages(id, paths)) {
+            // 图片落库失败则整条评价作废（软删除），避免出现「配图静默丢失」的半成品评价
+            ReviewDao::updateStatus(id, "deleted");
+            throw BizError(resp::SERVER_ERROR, "评价图片保存失败，请重试");
+        }
     }
     auto rev = ReviewDao::reviewById(id);
     decorateTargetName(rev);

@@ -93,6 +93,9 @@ async function renderReports(main) {
         '<div class="d-flex align-items-center gap-2 mb-1"><span class="badge-soft badge-pending">举报 #' + p.id + "</span>" +
         '<span class="text-muted" style="font-size:13px">' + LL.esc(p.reporter_username) + " 举报了 " + LL.esc(p.review_author) + " 对「" + LL.esc(p.merchant_name) + '」的评价</span></div>' +
         '<div class="text-muted" style="font-size:13px">评价内容：' + LL.esc(p.review_content) + "</div>" +
+        ((p.images || []).length
+          ? '<div class="rv-imgs mt-2">' + p.images.map(u => '<img src="' + LL.esc(u) + '" data-view-src="' + LL.esc(u) + '" title="点击查看大图" loading="lazy" alt="被举报评价配图">').join("") + "</div>"
+          : "") +
         '<div class="mt-1" style="font-size:13px">举报理由：<b>' + LL.esc(p.reason) + "</b>（评分 " + Number(p.avg_score).toFixed(1) + "）</div>" +
         '<div class="d-flex gap-2 mt-2">' +
         '<button class="btn btn-fire btn-sm" data-hide="' + p.id + '"><i class="bi bi-eye-slash"></i> 下架该评价</button>' +

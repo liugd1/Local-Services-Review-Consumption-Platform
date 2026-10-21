@@ -56,6 +56,8 @@ bool addReviewImages(long long reviewId, const std::vector<std::string>& paths) 
     for (const auto& p : paths) {
         if (db.execute("INSERT INTO review_images (review_id, image_path) VALUES (?, ?)",
                        {std::to_string(reviewId), p}) < 0) {
+            // 部分写入失败：清掉本条评价已写入的图片，避免出现不完整的图集
+            db.execute("DELETE FROM review_images WHERE review_id = ?", {std::to_string(reviewId)});
             return false;
         }
     }
@@ -313,11 +315,13 @@ nlohmann::json listReports(const std::string& status, int page, int size, long l
     auto pageParams = params;
     pageParams.push_back(std::to_string(size));
     pageParams.push_back(std::to_string((page - 1) * size));
-    return db.query(
+    auto rows = db.query(
         "SELECT rp.id, rp.review_id, rp.reason, rp.status, rp.result, rp.created_at, "
         "rp.user_id, ru.username AS reporter_username, r.content AS review_content, "
         "r.avg_score, r.merchant_id, m.name AS merchant_name, "
-        "r.user_id AS review_user_id, u2.nickname AS review_author "
+        "r.user_id AS review_user_id, u2.nickname AS review_author, "
+        "(SELECT GROUP_CONCAT(ri.image_path, '|') FROM review_images ri "
+        " WHERE ri.review_id = r.id) AS images "
         "FROM review_reports rp "
         "JOIN reviews r ON r.id = rp.review_id "
         "JOIN merchants m ON m.id = r.merchant_id "
@@ -325,6 +329,8 @@ nlohmann::json listReports(const std::string& status, int page, int size, long l
         "JOIN users u2 ON u2.id = r.user_id" +
             where + " ORDER BY rp.id DESC LIMIT ? OFFSET ?",
         pageParams);
+    for (auto& row : rows) attachImageArray(row);
+    return rows;
 }
 
 bool setReportStatus(long long id, const std::string& status, const std::string& result) {
